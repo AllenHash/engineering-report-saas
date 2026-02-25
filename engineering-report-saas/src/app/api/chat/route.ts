@@ -121,16 +121,22 @@ function extractInfo(message: string, currentState: any): any {
     }
   }
   
-  // 提取地点
-  const locationPatterns = [
-    /((?:北京|上海|天津|重庆)|(?:[江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|河北|山西|辽宁|吉林|黑龙江)省?)(?:省|市|县|[自治区])?/g,
-    /((?:成都|武汉|长沙|南昌|合肥|杭州|南京|广州|深圳|西安|郑州|济南|青岛|福州|厦门|昆明|贵阳|南宁|石家庄|太原|哈尔滨|长春|沈阳))/g
-  ];
-  for (const pattern of locationPatterns) {
-    const match = message.match(pattern);
-    if (match && !newState.location) {
-      newState.location = match[0];
+  // 提取地点（简化版）
+  const provinces = ["北京", "上海", "天津", "重庆", "四川", "江苏", "浙江", "安徽", "福建", "江西", "山东", "河南", "湖北", "湖南", "广东", "海南", "贵州", "云南", "陕西", "甘肃", "青海", "河北", "山西", "辽宁", "吉林", "黑龙江"];
+  const cities = ["成都", "武汉", "长沙", "南昌", "合肥", "杭州", "南京", "广州", "深圳", "西安", "郑州", "济南", "青岛", "福州", "厦门", "昆明", "贵阳", "南宁", "石家庄", "太原", "哈尔滨", "长春", "沈阳"];
+  
+  for (const p of provinces) {
+    if (message.includes(p)) {
+      newState.location = p;
       break;
+    }
+  }
+  if (!newState.location) {
+    for (const c of cities) {
+      if (message.includes(c)) {
+        newState.location = c;
+        break;
+      }
     }
   }
   
