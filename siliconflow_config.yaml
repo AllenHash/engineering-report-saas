@@ -1,0 +1,33 @@
+# SiliconFlow 模型配置示例
+# ------------------------------------------------------------
+# 1. API Key: 已写入工作区根目录的 .env 文件，
+#    请确保运行时可以读取该变量（如 `dotenv`、`os.getenv` 等）
+# 2. 默认模型（可自行替换）
+#    - model: siliconflow/silicon-llama-2-70b-chat
+#    - deployment_name: my-llama2-70b   # 与平台中部署的名称保持一致
+#    - max_tokens: 4096                # 生成的最大 token 数
+#    - temperature: 0.7                # 采样温度，0~2 之间
+#    - top_p: 0.9                      # nucleus 采样阈值
+# 3. 调用方式（Python / Node / cURL）请参考后面的示例代码。
+
+model:
+  name: "siliconflow/silicon-llama-2-70b-chat"
+  deployment_name: "my-llama2-70b"
+  max_tokens: 4096
+  temperature: 0.7
+  top_p: 0.9
+  stream: true   # 是否开启流式返回，推荐在交互式 UI 中开启
+
+# 可选：如果你想切换到其他模型，只需要修改 `name` 与 `deployment_name`
+# 例如切换到 Qwen 72B：
+# model:
+#   name: "siliconflow/qwen-72b-chat"
+#   deployment_name: "my-qwen-72b"
+#   max_tokens: 4096
+#   temperature: 0.7
+#   top_p: 0.9
+#   stream: true
+
+# ------------------------------------------------------------
+# 下面给出三套调用示例（Python、Node.js、cURL）
+# ------------------------------------------------------------
