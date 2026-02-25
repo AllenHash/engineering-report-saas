@@ -1,270 +1,144 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOutline, exportOutlineToMarkdown, getOutlineList } from "@/data/outlines";
+import { getApiKey, API_URL } from "@/lib/api-utils";
+import { extractInfoFromMessages, generateConfirmationMessage, ExtractedInfo } from "@/lib/agents/infoExtractor";
+import { generateFullReport, SectionContent } from "@/lib/agents/contentGenerator";
+import { getTemplateById } from "@/data/templates/outlines";
 
-// API配置
-const getApiKeys = () => ({
-  siliconflow: process.env.SILICONFLOW_API_KEY || "sk-qqqmkuqspdfmtmdokzckygylkxktxgojlnqqadnxztenmtkh",
-  minimax: process.env.MINIMAX_API_KEY || ""
-});
-
-// API端点
-const API_ENDPOINTS = {
-  minimax: "https://api.minimax.chat/v1/text/chatcompletion_pro",
-  siliconflow: "https://api.siliconflow.cn/v1/chat/completions"
-};
-
-// 模型配置
-const MODELS = {
-  // MiniMax Coding Plan (主用)
-  minimax: "MiniMax/MiniMax-Text-01",
-  // 硅基流动备选
-  deepseek: "deepseek-ai/DeepSeek-V3",
-  glm: "THUglm/GLM-4-9B-Chat",
-  qwen: "Qwen/Qwen2.5-7B-Instruct"
-};
-
-// 模型列表（按优先级）
-const MODEL_LIST = [
-  { key: "minimax", name: "MiniMax Coding", model: MODELS.minimax, provider: "minimax" },
-  { key: "deepseek", name: "DeepSeek V3", model: MODELS.deepseek, provider: "siliconflow" },
-  { key: "glm", name: "GLM-5", model: MODELS.glm, provider: "siliconflow" },
-  { key: "qwen", name: "Qwen 3.5", model: MODELS.qwen, provider: "siliconflow" }
-];
-
-// 项目信息收集状态（内存中存储，实际应存数据库）
-const projectStates = new Map<string, {
-  type: string | null;
-  name: string | null;
-  location: string | null;
-  scale: string | null;
-  investment: string | null;
-}>();
-
-function getProjectState(sessionId: string) {
-  if (!projectStates.has(sessionId)) {
-    projectStates.set(sessionId, {
-      type: null,
-      name: null,
-      location: null,
-      scale: null,
-      investment: null
-    });
-  }
-  return projectStates.get(sessionId)!;
-}
+// 项目信息内存存储（后续应存数据库）
+const projectInfoStore = new Map<string, ExtractedInfo>();
 
 // 系统提示词
-const getSystemPrompt = (sessionId: string) => {
-  const state = getProjectState(sessionId);
-  
-  const outlineList = getOutlineList().map(o => `- ${o.name}: ${o.type}`).join("\n");
-  
-  let prompt = `你是工程可行性报告AI助手，专门帮助用户编写工程可行性报告。
+const SYSTEM_PROMPT = `你是工程可行性报告AI助手，专门帮助用户编写工程可行性报告。
 
 ## 你的角色
 - 你是一个专业、友好的AI助手
 - 通过对话引导用户完成可行性报告的编写
-- 每次只问1-2个关键问题，不要一次问太多
+- 每次只问1-2个关键问题
 
 ## 支持的工程类型
-1. 公路工程 (highway) - 道路、桥梁、隧道、立交等
-2. 市政工程 (municipal) - 排水、供水、燃气、供热、管网等
-3. 生态环境工程 (ecology) - 湿地修复、矿山修复、河道治理等
+1. 公路工程 - 道路、桥梁、隧道
+2. 市政工程 - 排水、供水、燃气、管网
+3. 生态环境工程 - 湿地修复、矿山修复、河道治理
 
 ## 对话流程
 1. 首先确认用户需要的报告类型
-2. 逐步收集关键信息：项目名称、建设地点、工程规模、投资估算等
-3. 当收集到"项目名称 + 建设地点 + 工程类型"后，告诉用户将使用标准大纲
-4. 可以展示大纲结构并询问用户是否有需要调整的部分
-5. 根据用户确认的大纲，逐一填充各章节内容
+2. 逐步收集关键信息：项目名称、建设地点、工程规模、投资估算
+3. 信息收集足够后，询问是否开始生成报告
+4. 用户确认后，生成完整报告
 
-## 内置大纲
-系统已内置国家标准大纲（国家发改委2023年版），包括：
-${outlineList}
-
-## 当前收集状态
-${state.type ? `- 工程类型: ${state.type}` : "- 工程类型: 未确定"}
-${state.name ? `- 项目名称: ${state.name}` : "- 项目名称: 未提供"}
-${state.location ? `- 建设地点: ${state.location}` : "- 建设地点: 未提供"}
-${state.scale ? `- 建设规模: ${state.scale}` : "- 建设规模: 未提供"}
-${state.investment ? `- 投资估算: ${state.investment}` : "- 投资估算: 未提供"}
-
-## 重要原则
-- 用户已经提供的信息不要重复询问
-- 根据用户提供的话提取有用信息并更新状态
-- 对话要自然流畅，像人与人聊天
-- 每次回复简洁，不超过200字
-- 使用中文交流
-- 当收集到足够信息后，展示对应的大纲给用户确认
-
-当前任务：帮助用户通过对话逐步完成工程可行性报告。`;
-
-  return prompt;
-};
-
-// 从用户消息中提取信息
-function extractInfo(message: string, currentState: any): any {
-  const newState = { ...currentState };
-  const lower = message.toLowerCase();
-  
-  // 检测工程类型
-  if (!newState.type) {
-    if (lower.includes("公路") || lower.includes("道路") || lower.includes("高速") || lower.includes("桥梁") || lower.includes("隧道")) {
-      newState.type = "highway";
-    } else if (lower.includes("市政") || lower.includes("排水") || lower.includes("供水") || lower.includes("燃气")) {
-      newState.type = "municipal";
-    } else if (lower.includes("生态") || lower.includes("环境") || lower.includes("湿地") || lower.includes("修复") || lower.includes("矿山") || lower.includes("河道")) {
-      newState.type = "ecology";
-    }
-  }
-  
-  // 提取项目名称（简单匹配）
-  const namePatterns = [
-    /(?:名称|叫|名为|项目|工程)(?:是|叫|为)?([^，。,，]+)/i,
-    /"([^"]+)"/,
-    /「([^」]+)」/
-  ];
-  for (const pattern of namePatterns) {
-    const match = message.match(pattern);
-    if (match && !newState.name) {
-      newState.name = match[1].trim().slice(0, 50);
-      break;
-    }
-  }
-  
-  // 提取地点（简化版）
-  const provinces = ["北京", "上海", "天津", "重庆", "四川", "江苏", "浙江", "安徽", "福建", "江西", "山东", "河南", "湖北", "湖南", "广东", "海南", "贵州", "云南", "陕西", "甘肃", "青海", "河北", "山西", "辽宁", "吉林", "黑龙江"];
-  const cities = ["成都", "武汉", "长沙", "南昌", "合肥", "杭州", "南京", "广州", "深圳", "西安", "郑州", "济南", "青岛", "福州", "厦门", "昆明", "贵阳", "南宁", "石家庄", "太原", "哈尔滨", "长春", "沈阳"];
-  
-  for (const p of provinces) {
-    if (message.includes(p)) {
-      newState.location = p;
-      break;
-    }
-  }
-  if (!newState.location) {
-    for (const c of cities) {
-      if (message.includes(c)) {
-        newState.location = c;
-        break;
-      }
-    }
-  }
-  
-  // 提取规模（数字+单位）
-  const scaleMatch = message.match(/(\d+(?:\.\d+)?)\s*(公里|千米|米|万平方米|亩|公顷|米\/秒|车道)/i);
-  if (scaleMatch && !newState.scale) {
-    newState.scale = scaleMatch[0];
-  }
-  
-  // 提取投资
-  const investMatch = message.match(/(\d+(?:\.\d+)?)\s*(亿|万|元|k|千)/i);
-  if (investMatch && !newState.investment) {
-    newState.investment = investMatch[0];
-    if (!newState.investment.includes("亿") && !newState.investment.includes("万")) {
-      newState.investment += "元";
-    }
-  }
-  
-  return newState;
-}
+## 当前任务
+帮助用户通过对话逐步完成工程可行性报告。`;
 
 // 调用AI
-async function callAI(messages: { role: string; content: string }[], sessionId: string): Promise<string> {
-  const apiKeys = getApiKeys();
-
-  for (const modelInfo of MODEL_LIST) {
-    try {
-      const apiKey = modelInfo.provider === "minimax" ? apiKeys.minimax : apiKeys.siliconflow;
-      const apiUrl = API_ENDPOINTS[modelInfo.provider as keyof typeof API_ENDPOINTS];
-      
-      if (!apiKey) {
-        console.log(`[AI] ${modelInfo.name} no API key, skip`);
-        continue;
-      }
-
-      console.log(`[AI] Trying ${modelInfo.name} (${modelInfo.provider})`);
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: modelInfo.model,
-          messages: [
-            { role: "system", content: getSystemPrompt(sessionId) },
-            ...messages.slice(-10)
-          ],
-          temperature: 0.7,
-          max_tokens: 2048
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log(`[AI] ${modelInfo.name} failed:`, response.status, errorText.slice(0, 100));
-        continue;
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || data.text;
-      
-      if (content) {
-        console.log(`[AI] ${modelInfo.name} success!`);
-        return content;
-      }
-    } catch (error) {
-      console.error(`[AI] ${modelInfo.name} error:`, error);
-      continue;
-    }
+async function callAI(messages: any[]): Promise<string> {
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${getApiKey()}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-ai/DeepSeek-V3",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...messages.slice(-10)
+        ],
+        temperature: 0.7,
+        max_tokens: 2048
+      })
+    });
+    
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "";
+  } catch (e) {
+    console.error("AI error:", e);
+    return "抱歉，服务暂时不可用。";
   }
-
-  return "抱歉，AI服务暂时不可用，请稍后再试。";
-}
-
-// 判断是否需要展示大纲
-function shouldShowOutline(state: any): boolean {
-  return !!(state.type && state.name && state.location);
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages, sessionId } = body;
+    const { messages, action, sessionId } = body;
 
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: "Invalid messages format" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
     }
 
-    // 使用sessionId或随机ID
+    // 获取或初始化项目信息
     const sid = sessionId || "default";
+    let projectInfo = projectInfoStore.get(sid) || {};
     
-    // 更新项目状态
-    const lastMessage = messages[messages.length - 1]?.content || "";
-    const currentState = getProjectState(sid);
-    const newState = extractInfo(lastMessage, currentState);
-    projectStates.set(sid, newState);
+    // 1. 先调用AI处理对话
+    const userMessage = messages[messages.length - 1].content;
+    let aiResponse = await callAI(messages);
     
-    // 检查是否需要展示大纲
-    if (shouldShowOutline(newState) && !shouldShowOutline(currentState)) {
-      // 刚收集到足够信息，生成大纲
-      const outline = getOutline(newState.type!);
-      const outlineMd = exportOutlineToMarkdown(outline);
-      
-      const response = await callAI(messages, sid);
-      
-      // 附加大纲信息
-      const finalResponse = `${response}\n\n---\n📋 已为你加载《${outline.name}》：\n\n${outlineMd}\n\n请确认这份大纲是否适合你的项目，如有需要调整的部分请告诉我。`;
-      
-      return NextResponse.json({ message: finalResponse, state: newState });
+    // 2. 提取/更新项目信息
+    const newInfo = await extractInfoFromMessages(messages);
+    projectInfo = { ...projectInfo, ...newInfo };
+    projectInfoStore.set(sid, projectInfo);
+    
+    // 3. 如果用户确认生成报告
+    if (action === "generate_report" || userMessage.includes("生成报告") || userMessage.includes("开始写")) {
+      if (!projectInfo.projectName || !projectInfo.location || !projectInfo.projectType) {
+        aiResponse = "请先告诉我项目的基本信息（名称、地点、类型），我再帮你生成报告。";
+      } else {
+        // 确定模板ID
+        const templateIdMap: Record<string, string> = {
+          highway: "highway-2023",
+          municipal: "municipal",
+          ecology: "ecology",
+          water: "water",
+          building: "building",
+          general: "gov-2023-standard"
+        };
+        const templateId = templateIdMap[projectInfo.projectType] || "gov-2023-standard";
+        
+        aiResponse = "好的，正在为你生成完整的可行性报告，这可能需要一些时间...\n\n";
+        
+        // 生成报告
+        const sections = await generateFullReport(
+          {
+            name: projectInfo.projectName,
+            location: projectInfo.location,
+            type: projectInfo.projectType,
+            scale: projectInfo.scale || "",
+            investment: projectInfo.investment || ""
+          },
+          templateId
+        );
+        
+        // 整合报告
+        const report = {
+          id: `report_${Date.now()}`,
+          title: `${projectInfo.projectName}可行性研究报告`,
+          templateId,
+          projectInfo,
+          sections,
+          createdAt: new Date().toISOString()
+        };
+        
+        aiResponse += "✅ 报告已生成完成！你可以在右侧预览完整内容。\n\n";
+        aiResponse += `📋 报告包含 ${sections.length} 个章节，共 ${sections.reduce((acc, s) => acc + s.content.length, 0)} 字。`;
+        
+        return NextResponse.json({ 
+          message: aiResponse, 
+          state: projectInfo,
+          report: report
+        });
+      }
+    } else if (Object.keys(newInfo).length > 0) {
+      // 如果提取到了新信息，追加确认
+      const confirmMsg = generateConfirmationMessage(newInfo);
+      aiResponse += "\n\n" + confirmMsg;
     }
 
-    // 正常对话
-    const responseMessage = await callAI(messages, sid);
+    return NextResponse.json({ 
+      message: aiResponse, 
+      state: projectInfo 
+    });
 
-    return NextResponse.json({ message: responseMessage, state: newState });
   } catch (error) {
     console.error("Chat API error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
