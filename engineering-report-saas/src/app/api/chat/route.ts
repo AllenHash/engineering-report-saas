@@ -1,146 +1,120 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiKey, API_URL } from "@/lib/api-utils";
-import { extractInfoFromMessages, generateConfirmationMessage, ExtractedInfo } from "@/lib/agents/infoExtractor";
-import { generateFullReport, SectionContent } from "@/lib/agents/contentGenerator";
+import { extractInfoFromMessages, generateConfirmation, ExtractedInfo } from "@/lib/agent-utils";
 import { getTemplateById } from "@/data/templates/outlines";
 
-// 项目信息内存存储（后续应存数据库）
-const projectInfoStore = new Map<string, ExtractedInfo>();
+const API_KEY = process.env.SILICONFLOW_API_KEY || "sk-qqqmkuqspdfmtmdokzckygylkxktxgojlnqqadnxztenmtkh";
+const API_URL = "https://api.siliconflow.cn/v1/chat/completions";
 
-// 系统提示词
-const SYSTEM_PROMPT = `你是工程可行性报告AI助手，专门帮助用户编写工程可行性报告。
+const SYSTEM_PROMPT = `你是工程可行性报告AI助手，帮助用户编写报告。
 
-## 你的角色
-- 你是一个专业、友好的AI助手
-- 通过对话引导用户完成可行性报告的编写
-- 每次只问1-2个关键问题
-
-## 支持的工程类型
-1. 公路工程 - 道路、桥梁、隧道
-2. 市政工程 - 排水、供水、燃气、管网
-3. 生态环境工程 - 湿地修复、矿山修复、河道治理
+## 支持类型
+- 公路工程、市政工程、生态环境工程
 
 ## 对话流程
-1. 首先确认用户需要的报告类型
-2. 逐步收集关键信息：项目名称、建设地点、工程规模、投资估算
-3. 信息收集足够后，询问是否开始生成报告
-4. 用户确认后，生成完整报告
+1. 确认报告类型
+2. 收集项目名称、建设地点
+3. 用户确认后生成报告
 
-## 当前任务
-帮助用户通过对话逐步完成工程可行性报告。`;
+直接回复，不需要JSON。`;
 
-// 调用AI
+const projectInfoStore = new Map<string, ExtractedInfo>();
+
 async function callAI(messages: any[]): Promise<string> {
   try {
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${getApiKey()}`
-      },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
       body: JSON.stringify({
         model: "deepseek-ai/DeepSeek-V3",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          ...messages.slice(-10)
-        ],
-        temperature: 0.7,
-        max_tokens: 2048
+        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages.slice(-8)],
+        temperature: 0.7, max_tokens: 1536
       })
     });
-    
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || "";
-  } catch (e) {
-    console.error("AI error:", e);
-    return "抱歉，服务暂时不可用。";
-  }
+    return data.choices?.[0]?.message?.content || "抱歉，服务暂时不可用。";
+  } catch (e) { return "抱歉，服务暂时不可用。"; }
+}
+
+// 生成单个章节
+async function generateSection(section: any, info: any): Promise<string> {
+  const prompt = `撰写报告章节"${section.title}"。
+项目：${info.projectName || '待定'}
+地点：${info.location || '待定'}
+类型：${info.projectType || '待定'}
+规模：${info.scale || '待定'}
+投资：${info.investment || '待定'}
+
+直接返回内容，不需要标题。`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
+      body: JSON.stringify({
+        model: "deepseek-ai/DeepSeek-V3",
+        messages: [{ role: "system", content: "专业工程报告撰写" }, { role: "user", content: prompt }],
+        temperature: 0.7, max_tokens: 1024
+      })
+    });
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "[生成中...]";
+  } catch (e) { return "[生成失败]"; }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { messages, action, sessionId } = body;
+    const sid = sessionId || "default";
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
     }
 
-    // 获取或初始化项目信息
-    const sid = sessionId || "default";
     let projectInfo = projectInfoStore.get(sid) || {};
-    
-    // 1. 先调用AI处理对话
     const userMessage = messages[messages.length - 1].content;
+
+    // 调用AI
     let aiResponse = await callAI(messages);
-    
-    // 2. 提取/更新项目信息
+
+    // 提取信息
     const newInfo = await extractInfoFromMessages(messages);
     projectInfo = { ...projectInfo, ...newInfo };
     projectInfoStore.set(sid, projectInfo);
-    
-    // 3. 如果用户确认生成报告
-    if (action === "generate_report" || userMessage.includes("生成报告") || userMessage.includes("开始写")) {
-      if (!projectInfo.projectName || !projectInfo.location || !projectInfo.projectType) {
-        aiResponse = "请先告诉我项目的基本信息（名称、地点、类型），我再帮你生成报告。";
+
+    // 生成报告
+    if (action === "generate_report" || userMessage.includes("生成报告")) {
+      if (!projectInfo.projectName || !projectInfo.location) {
+        aiResponse = "请先告诉我项目名称和地点。";
       } else {
-        // 确定模板ID
-        const templateIdMap: Record<string, string> = {
-          highway: "highway-2023",
-          municipal: "municipal",
-          ecology: "ecology",
-          water: "water",
-          building: "building",
-          general: "gov-2023-standard"
-        };
-        const templateId = templateIdMap[projectInfo.projectType] || "gov-2023-standard";
+        const templateId = projectInfo.projectType === "highway" ? "highway-2023" : "gov-2023-standard";
+        const template = getTemplateById(templateId);
         
-        aiResponse = "好的，正在为你生成完整的可行性报告，这可能需要一些时间...\n\n";
+        aiResponse = "正在生成报告...\n\n";
+        const sections = [];
         
-        // 生成报告
-        const sections = await generateFullReport(
-          {
-            name: projectInfo.projectName,
-            location: projectInfo.location,
-            type: projectInfo.projectType,
-            scale: projectInfo.scale || "",
-            investment: projectInfo.investment || ""
-          },
-          templateId
-        );
-        
-        // 整合报告
+        for (const section of template?.sections?.slice(0, 3) || []) {
+          const content = await generateSection(section, projectInfo);
+          sections.push({ id: section.id, title: section.title, content });
+        }
+
         const report = {
           id: `report_${Date.now()}`,
           title: `${projectInfo.projectName}可行性研究报告`,
-          templateId,
-          projectInfo,
-          sections,
+          templateId, projectInfo, sections,
           createdAt: new Date().toISOString()
         };
-        
-        aiResponse += "✅ 报告已生成完成！你可以在右侧预览完整内容。\n\n";
-        aiResponse += `📋 报告包含 ${sections.length} 个章节，共 ${sections.reduce((acc, s) => acc + s.content.length, 0)} 字。`;
-        
-        return NextResponse.json({ 
-          message: aiResponse, 
-          state: projectInfo,
-          report: report
-        });
+
+        aiResponse += `✅ 报告已生成！包含 ${sections.length} 个章节。`;
+        return NextResponse.json({ message: aiResponse, state: projectInfo, report });
       }
     } else if (Object.keys(newInfo).length > 0) {
-      // 如果提取到了新信息，追加确认
-      const confirmMsg = generateConfirmationMessage(newInfo);
-      aiResponse += "\n\n" + confirmMsg;
+      aiResponse += "\n\n" + generateConfirmation(newInfo);
     }
 
-    return NextResponse.json({ 
-      message: aiResponse, 
-      state: projectInfo 
-    });
-
+    return NextResponse.json({ message: aiResponse, state: projectInfo });
   } catch (error) {
-    console.error("Chat API error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    console.error("Chat error:", error);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
