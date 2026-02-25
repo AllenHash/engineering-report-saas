@@ -1,23 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOutline, exportOutlineToMarkdown, getOutlineList } from "@/data/outlines";
 
-// 硅基流动API配置
-const getApiKey = () => process.env.SILICONFLOW_API_KEY || "sk-qqqmkuqspdfmtmdokzckygylkxktxgojlnqqadnxztenmtkh";
-const API_URL = "https://api.siliconflow.cn/v1/chat/completions";
+// API配置
+const getApiKeys = () => ({
+  siliconflow: process.env.SILICONFLOW_API_KEY || "sk-qqqmkuqspdfmtmdokzckygylkxktxgojlnqqadnxztenmtkh",
+  minimax: process.env.MINIMAX_API_KEY || ""
+});
+
+// API端点
+const API_ENDPOINTS = {
+  minimax: "https://api.minimax.chat/v1/text/chatcompletion_pro",
+  siliconflow: "https://api.siliconflow.cn/v1/chat/completions"
+};
 
 // 模型配置
 const MODELS = {
-  primary: "mx-T2-2002203042",
+  // MiniMax Coding Plan (主用)
+  minimax: "MiniMax/MiniMax-Text-01",
+  // 硅基流动备选
   deepseek: "deepseek-ai/DeepSeek-V3",
   glm: "THUglm/GLM-4-9B-Chat",
   qwen: "Qwen/Qwen2.5-7B-Instruct"
 };
 
+// 模型列表（按优先级）
 const MODEL_LIST = [
-  { key: "primary", name: "MiniMax 2.5", model: MODELS.primary },
-  { key: "deepseek", name: "DeepSeek V3", model: MODELS.deepseek },
-  { key: "glm", name: "GLM-5", model: MODELS.glm },
-  { key: "qwen", name: "Qwen 3.5", model: MODELS.qwen }
+  { key: "minimax", name: "MiniMax Coding", model: MODELS.minimax, provider: "minimax" },
+  { key: "deepseek", name: "DeepSeek V3", model: MODELS.deepseek, provider: "siliconflow" },
+  { key: "glm", name: "GLM-5", model: MODELS.glm, provider: "siliconflow" },
+  { key: "qwen", name: "Qwen 3.5", model: MODELS.qwen, provider: "siliconflow" }
 ];
 
 // 项目信息收集状态（内存中存储，实际应存数据库）
@@ -160,11 +171,21 @@ function extractInfo(message: string, currentState: any): any {
 
 // 调用AI
 async function callAI(messages: { role: string; content: string }[], sessionId: string): Promise<string> {
-  const apiKey = getApiKey();
+  const apiKeys = getApiKeys();
 
   for (const modelInfo of MODEL_LIST) {
     try {
-      const response = await fetch(API_URL, {
+      const apiKey = modelInfo.provider === "minimax" ? apiKeys.minimax : apiKeys.siliconflow;
+      const apiUrl = API_ENDPOINTS[modelInfo.provider as keyof typeof API_ENDPOINTS];
+      
+      if (!apiKey) {
+        console.log(`[AI] ${modelInfo.name} no API key, skip`);
+        continue;
+      }
+
+      console.log(`[AI] Trying ${modelInfo.name} (${modelInfo.provider})`);
+
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -181,12 +202,19 @@ async function callAI(messages: { role: string; content: string }[], sessionId: 
         })
       });
 
-      if (!response.ok) continue;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log(`[AI] ${modelInfo.name} failed:`, response.status, errorText.slice(0, 100));
+        continue;
+      }
 
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
+      const content = data.choices?.[0]?.message?.content || data.text;
       
-      if (content) return content;
+      if (content) {
+        console.log(`[AI] ${modelInfo.name} success!`);
+        return content;
+      }
     } catch (error) {
       console.error(`[AI] ${modelInfo.name} error:`, error);
       continue;
