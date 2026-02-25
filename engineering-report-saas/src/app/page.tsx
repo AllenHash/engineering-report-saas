@@ -14,7 +14,7 @@ export default function Home() {
     {
       id: "1",
       role: "assistant",
-      content: "你好！我是工程可行性报告AI助手。\n\n请告诉我你需要写什么类型的可行性报告，比如：\n- 公路工程\n- 市政工程\n- 生态环境工程\n\n我会通过对话引导你完成报告的编写。",
+      content: "你好，你需要写一份什么报告？\n\n我可以帮你编写：\n- 🛣️ 公路工程\n- 🏙️ 市政工程\n- 🌿 生态环境工程",
       timestamp: new Date(),
     },
   ]);
