@@ -50,13 +50,14 @@ ${section.children?.map((c: any) => `- ${c.id} ${c.title}: ${c.description || ''
 };
 
 // 调用AI生成章节内容
+// 生成单个章节内容（非流式）
 async function generateSection(
-  section: any, 
-  projectInfo: any, 
+  section: any,
+  projectInfo: any,
   templateName: string
 ): Promise<string> {
   const prompt = getSectionPrompt(section, projectInfo, templateName);
-  
+
   try {
     const response = await fetch(API_URL, {
       method: "POST",
@@ -80,6 +81,75 @@ async function generateSection(
   } catch (error) {
     console.error("Generate section error:", error);
     return "（内容生成失败，请稍后重试）";
+  }
+}
+
+// 流式生成单个章节内容
+async function* streamGenerateSection(
+  section: any,
+  projectInfo: any,
+  templateName: string
+): AsyncGenerator<string, void, unknown> {
+  const prompt = getSectionPrompt(section, projectInfo, templateName);
+
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${getApiKey()}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-ai/DeepSeek-V3",
+        messages: [
+          { role: "system", content: "你是一个专业的工程可行性报告撰写专家，擅长撰写符合中国规范的可行性报告。回复要简洁专业，直接给出内容。" },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 2048,
+        stream: true
+      })
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+
+        const dataStr = trimmed.slice(5).trim();
+        if (dataStr === '[DONE]') {
+          return;
+        }
+
+        try {
+          const data = JSON.parse(dataStr);
+          const content = data.choices?.[0]?.delta?.content;
+          if (content) {
+            yield content;
+          }
+        } catch (e) {
+          // 忽略解析错误
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Stream generate section error:", error);
+    yield "（内容生成失败，请稍后重试）";
   }
 }
 
@@ -346,6 +416,82 @@ export async function POST(request: NextRequest) {
     console.error("Report generation error:", error);
     return NextResponse.json(
       { error: "报告生成失败，请稍后重试" },
+      { status: 500 }
+    );
+  }
+}
+
+// 流式生成单个章节（SSE）
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { section, projectInfo, templateId, sectionId } = body;
+
+    if (!section || !projectInfo || !templateId || !sectionId) {
+      return NextResponse.json(
+        { error: "缺少必要参数" },
+        { status: 400 }
+      );
+    }
+
+    const template = getTemplateById(templateId);
+    if (!template) {
+      return NextResponse.json(
+        { error: "模板不存在" },
+        { status: 404 }
+      );
+    }
+
+    // 创建SSE流
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        let fullContent = '';
+
+        const sendContent = (content: string, done: boolean = false) => {
+          const data = JSON.stringify({
+            content,
+            done,
+            sectionId
+          });
+          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+        };
+
+        try {
+          // 开始生成
+          sendContent('', false);
+
+          // 流式获取内容
+          for await (const chunk of streamGenerateSection(section, projectInfo, template.name)) {
+            fullContent += chunk;
+            sendContent(fullContent, false);
+          }
+
+          // 完成
+          sendContent(fullContent, true);
+          controller.close();
+
+        } catch (error) {
+          console.error("Stream generation error:", error);
+          const errorMsg = "（内容生成失败，请稍后重试）";
+          sendContent(errorMsg, true);
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      }
+    });
+
+  } catch (error) {
+    console.error("Patch error:", error);
+    return NextResponse.json(
+      { error: "生成失败" },
       { status: 500 }
     );
   }

@@ -83,6 +83,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
+  // 单章节流式生成状态
+  const [isGeneratingSection, setIsGeneratingSection] = useState(false);
+  const [generatingSectionId, setGeneratingSectionId] = useState<string | null>(null);
+  const [streamedContent, setStreamedContent] = useState("");
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+
   // 导出PDF状态
   const [isExporting, setIsExporting] = useState(false);
 
@@ -407,6 +413,116 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const handleSave = async () => {
     if (!report) return;
     await saveReport(report.sections);
+  };
+
+  // 流式生成单个章节内容
+  const handleGenerateSection = async (sectionId: string) => {
+    if (!report || !report.projectInfo) return;
+
+    const section = report.sections.find(s => s.id === sectionId);
+    if (!section) return;
+
+    // 如果已经在生成这个章节，不做操作
+    if (isGeneratingSection && generatingSectionId === sectionId) return;
+
+    // 创建 AbortController 用于取消
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    // 设置生成状态
+    setIsGeneratingSection(true);
+    setGeneratingSectionId(sectionId);
+    setStreamedContent("");
+    setGenerationError(null);
+
+    try {
+      const response = await fetch('/api/reports/generate', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section: { id: section.id, title: section.title },
+          projectInfo: report.projectInfo,
+          templateId: report.templateId,
+          sectionId: section.id
+        }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error('生成失败');
+      }
+
+      if (!response.body) {
+        throw new Error('无法读取响应');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        // 检查是否被取消
+        if (controller.signal.aborted) {
+          console.log('Generation cancelled');
+          break;
+        }
+
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.content !== undefined) {
+                setStreamedContent(data.content);
+              }
+
+              if (data.done) {
+                // 生成完成，更新章节内容
+                if (data.content) {
+                  const updatedSections = report.sections.map(s =>
+                    s.id === sectionId ? { ...s, content: data.content } : s
+                  );
+                  setReport({ ...report, sections: updatedSections });
+                  // 保存到数据库
+                  await saveReport(updatedSections);
+                }
+                setIsGeneratingSection(false);
+                setGeneratingSectionId(null);
+                setAbortController(null);
+              }
+            } catch (e) {
+              console.error('Parse SSE error:', e);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Generate section error:', error);
+      if (error.name !== 'AbortError') {
+        setGenerationError(error.message || '生成章节时出现错误');
+      }
+      setIsGeneratingSection(false);
+      setGeneratingSectionId(null);
+      setAbortController(null);
+    }
+  };
+
+  // 取消单章节流式生成
+  const handleCancelSectionGenerate = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+    setIsGeneratingSection(false);
+    setGeneratingSectionId(null);
+    setStreamedContent("");
   };
 
   // 一键生成报告
@@ -852,6 +968,26 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                       )}
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* AI生成按钮 */}
+                      {isGeneratingSection && generatingSectionId === section.id ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleCancelSectionGenerate(); }}
+                          className="p-1.5 rounded-lg hover:bg-red-500/20 transition-colors"
+                          style={{ color: '#f87171' }}
+                          title="取消生成"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleGenerateSection(section.id); }}
+                          className="p-1.5 rounded-lg hover:bg-violet-500/20 transition-colors"
+                          style={{ color: '#a78bfa' }}
+                          title="AI生成内容"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); startEditTitle(section); }}
                         className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
@@ -869,7 +1005,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                     </div>
                   </div>
                   <div className="mt-1.5 text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-                    {section.content ? section.content.substring(0, 50) + (section.content.length > 50 ? "..." : "") : "（暂无内容）"}
+                    {/* 正在生成时显示流式内容 */}
+                    {isGeneratingSection && generatingSectionId === section.id ? (
+                      <div className="flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" style={{ color: '#a78bfa' }} />
+                        <span style={{ color: '#a78bfa' }}>
+                          {streamedContent ? streamedContent.substring(0, 50) + (streamedContent.length > 50 ? "..." : "") : "（AI生成中...）"}
+                        </span>
+                      </div>
+                    ) : section.content ? (
+                      section.content.substring(0, 50) + (section.content.length > 50 ? "..." : "")
+                    ) : (
+                      "（暂无内容）"
+                    )}
                   </div>
                 </div>
               </div>
@@ -1057,26 +1205,45 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               <div
                 className="flex-1 rounded-2xl border overflow-hidden"
                 style={{
-                  borderColor: 'var(--border-color)',
+                  borderColor: isGeneratingSection && generatingSectionId === activeSectionId ? '#a78bfa' : 'var(--border-color)',
                   background: 'var(--bg-secondary)',
                   boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.2)',
                 }}
               >
-                <textarea
-                  value={activeSection.content}
-                  onChange={(e) => handleContentChange(e.target.value)}
-                  placeholder="请输入章节内容..."
-                  className="w-full h-full p-6 text-sm leading-relaxed resize-none bg-transparent focus:outline-none"
-                  style={{
-                    color: 'var(--text-primary)',
-                    lineHeight: '1.8',
-                  }}
-                />
+                {/* 当正在生成当前章节时，显示流式内容 */}
+                {isGeneratingSection && generatingSectionId === activeSectionId ? (
+                  <div className="w-full h-full p-6 text-sm leading-relaxed overflow-y-auto" style={{ color: 'var(--text-primary)', lineHeight: '1.8' }}>
+                    {streamedContent || (
+                      <span className="flex items-center gap-2" style={{ color: '#a78bfa' }}>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        AI正在撰写内容...
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <textarea
+                    value={activeSection.content}
+                    onChange={(e) => handleContentChange(e.target.value)}
+                    placeholder="请输入章节内容..."
+                    className="w-full h-full p-6 text-sm leading-relaxed resize-none bg-transparent focus:outline-none"
+                    style={{
+                      color: 'var(--text-primary)',
+                      lineHeight: '1.8',
+                    }}
+                  />
+                )}
               </div>
 
               {/* 字数统计 */}
               <div className="flex items-center justify-between mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                <span>字数: {activeSection.content.length}</span>
+                {isGeneratingSection && generatingSectionId === activeSectionId ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" style={{ color: '#a78bfa' }} />
+                    <span style={{ color: '#a78bfa' }}>字数: {streamedContent.length} (生成中...)</span>
+                  </span>
+                ) : (
+                  <span>字数: {activeSection.content.length}</span>
+                )}
                 <span>最后修改: {new Date(report.updatedAt).toLocaleString('zh-CN')}</span>
               </div>
             </div>
