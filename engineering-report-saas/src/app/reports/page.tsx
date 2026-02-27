@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Report {
   id: string;
@@ -11,49 +12,59 @@ interface Report {
   location: string;
   status: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export default function ReportsPage() {
+  const { user, loading: authLoading } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
-  // 模拟数据（后续连接后端）
+  // 从数据库获取报告列表
   useEffect(() => {
-    // TODO: 替换为真实API调用
-    setTimeout(() => {
-      setReports([
-        {
-          id: "1",
-          title: "成灌高速公路可行性研究报告",
-          projectName: "成灌高速公路",
-          projectType: "highway",
-          location: "四川省成都市",
-          status: "completed",
-          createdAt: "2026-02-25 14:30",
-        },
-        {
-          id: "2",
-          title: "成都市政道路改造工程报告",
-          projectName: "成都市政道路改造",
-          projectType: "municipal",
-          location: "四川省成都市",
-          status: "completed",
-          createdAt: "2026-02-24 10:15",
-        },
-        {
-          id: "3",
-          title: "河道生态修复工程报告",
-          projectName: "某河道生态修复",
-          projectType: "ecology",
-          location: "四川省某市",
-          status: "draft",
-          createdAt: "2026-02-23 16:45",
-        },
-      ]);
+    if (authLoading) return;
+
+    if (!user) {
       setLoading(false);
-    }, 500);
-  }, []);
+      return;
+    }
+
+    fetch("/api/reports")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setReports(data.reports || []);
+        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch reports:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [user, authLoading]);
+
+  // 删除报告
+  const handleDelete = async (id: string) => {
+    if (!confirm("确定要删除这份报告吗？")) return;
+
+    try {
+      const res = await fetch(`/api/reports/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setReports(reports.filter(r => r.id !== id));
+      } else {
+        alert(data.error || "删除失败");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("删除失败，请重试");
+    }
+  };
 
   const filteredReports = filter === "all" 
     ? reports 
@@ -64,6 +75,7 @@ export default function ReportsPage() {
       highway: "🛣️",
       municipal: "🏙️",
       ecology: "🌿",
+      environmental: "🌿",
       water: "💧",
       building: "🏗️",
     };
@@ -74,8 +86,36 @@ export default function ReportsPage() {
     if (status === "completed") {
       return <span className="px-2 py-1 text-xs rounded-full bg-green-500/20 text-green-400">已完成</span>;
     }
+    if (status === "generating") {
+      return <span className="px-2 py-1 text-xs rounded-full bg-blue-500/20 text-blue-400">生成中</span>;
+    }
     return <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/20 text-yellow-400">草稿</span>;
   };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  // 未登录时显示提示
+  if (!authLoading && !user) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">🔒</div>
+          <p className="text-gray-400 mb-4">请先登录查看您的报告</p>
+          <Link href="/login" className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700">
+            登录
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -89,9 +129,11 @@ export default function ReportsPage() {
           <div className="flex items-center gap-4">
             <Link href="/" className="text-sm text-gray-400 hover:text-white">首页</Link>
             <Link href="/reports" className="text-sm text-white">历史报告</Link>
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">
-              用
-            </div>
+            {user && (
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -173,19 +215,22 @@ export default function ReportsPage() {
                       {getStatusBadge(report.status)}
                     </div>
                     <div className="flex gap-6 text-sm text-gray-400">
-                      <span>📛 {report.projectName}</span>
-                      <span>📍 {report.location}</span>
-                      <span>🕐 {report.createdAt}</span>
+                      <span>📛 {report.projectName || '未命名项目'}</span>
+                      <span>📍 {report.location || '地址未填写'}</span>
+                      <span>🕐 {formatDate(report.createdAt)}</span>
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <Link
-                      href={`/reports/${report.id}`}
+                      href={`/editor/${report.id}`}
                       className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
                     >
-                      查看
+                      编辑
                     </Link>
-                    <button className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+                    <button
+                      onClick={() => handleDelete(report.id)}
+                      className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-red-600/50 text-red-400 rounded-lg transition-colors"
+                    >
                       删除
                     </button>
                   </div>

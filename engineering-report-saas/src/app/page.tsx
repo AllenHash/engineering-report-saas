@@ -62,12 +62,43 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 项目列表状态
-  const [projects, setProjects] = useState<Project[]>([
-    { id: "1", name: "成灌高速公路拓宽工程", status: "进行中", updatedAt: new Date() },
-    { id: "2", name: "成都市政道路改造", status: "已完成", updatedAt: new Date(Date.now() - 86400000) },
-    { id: "3", name: "生态环境修复项目", status: "待审批", updatedAt: new Date(Date.now() - 172800000) },
-  ]);
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>("1");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+
+  // 加载项目列表
+  useEffect(() => {
+    if (!user) {
+      setIsLoadingProjects(false);
+      return;
+    }
+
+    fetch("/api/reports")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.reports) {
+          const projectList = data.reports.map((r: any) => ({
+            id: r.id,
+            name: r.title || r.projectName || "新项目",
+            status: r.status === "completed" ? "已完成" : r.status === "generating" ? "生成中" : "进行中",
+            updatedAt: new Date(r.updatedAt || r.createdAt),
+          }));
+          setProjects(projectList);
+          if (projectList.length > 0 && !currentProjectId) {
+            setCurrentProjectId(projectList[0].id);
+          }
+        }
+      })
+      .catch(err => console.error("Failed to load projects:", err))
+      .finally(() => setIsLoadingProjects(false));
+  }, [user]);
+
+  // 确保始终有 currentProjectId
+  useEffect(() => {
+    if (!isLoadingProjects && projects.length > 0 && !currentProjectId) {
+      setCurrentProjectId(projects[0].id);
+    }
+  }, [isLoadingProjects, projects, currentProjectId]);
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -217,15 +248,59 @@ export default function Home() {
     }
   };
 
-  const handleNewProject = () => {
-    const newProject: Project = {
-      id: Date.now().toString(),
-      name: "新项目 " + (projects.length + 1),
-      status: "进行中",
-      updatedAt: new Date()
-    };
-    setProjects(prev => [newProject, ...prev]);
-    setCurrentProjectId(newProject.id);
+  const handleNewProject = async () => {
+    // 检查是否登录
+    if (!user) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    // 在数据库中创建新报告
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "新项目 " + (projects.length + 1),
+          projectInfo: {},
+          sections: [],
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.report) {
+        const newProject: Project = {
+          id: data.report.id,
+          name: data.report.title,
+          status: "进行中",
+          updatedAt: new Date()
+        };
+        setProjects(prev => [newProject, ...prev]);
+        setCurrentProjectId(newProject.id);
+      } else {
+        // 如果API失败，使用本地创建
+        const newProject: Project = {
+          id: Date.now().toString(),
+          name: "新项目 " + (projects.length + 1),
+          status: "进行中",
+          updatedAt: new Date()
+        };
+        setProjects(prev => [newProject, ...prev]);
+        setCurrentProjectId(newProject.id);
+      }
+    } catch (err) {
+      console.error("Create project error:", err);
+      // 使用本地创建作为后备
+      const newProject: Project = {
+        id: Date.now().toString(),
+        name: "新项目 " + (projects.length + 1),
+        status: "进行中",
+        updatedAt: new Date()
+      };
+      setProjects(prev => [newProject, ...prev]);
+      setCurrentProjectId(newProject.id);
+    }
 
     setMessages([
       {
@@ -240,10 +315,38 @@ export default function Home() {
   };
 
   // 切换项目
-  const handleSelectProject = (projectId: string) => {
+  const handleSelectProject = async (projectId: string) => {
     setCurrentProjectId(projectId);
-    // 这里可以根据项目ID加载不同的对话历史和报告数据
-    // 暂时保持当前状态
+
+    // 从数据库加载项目数据
+    try {
+      const res = await fetch(`/api/reports/${projectId}`);
+      const data = await res.json();
+
+      if (data.success && data.report) {
+        const report = data.report;
+        setProjectInfo(report.projectInfo);
+        setReportData({
+          id: report.id,
+          title: report.title,
+          templateName: report.templateName || '',
+          projectInfo: report.projectInfo,
+          sections: report.sections || []
+        });
+
+        // 清空对话，重新开始
+        setMessages([
+          {
+            id: "1",
+            role: "assistant",
+            content: "你好，你需要写一份什么报告？\n\n我可以帮你编写：\n- 🛣️ 公路工程\n- 🏙️ 市政工程\n- 🌿 生态环境工程",
+            timestamp: new Date(),
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error("Load project error:", err);
+    }
   };
 
   // 导出报告为Markdown
@@ -304,26 +407,36 @@ export default function Home() {
 
         {/* 项目列表 */}
         <div className="flex-1 overflow-y-auto px-2 py-2">
-          <div className="space-y-1">
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => handleSelectProject(project.id)}
-                className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
-                  currentProjectId === project.id
-                    ? "bg-gray-800 border border-gray-700"
-                    : "hover:bg-gray-800/50 border border-transparent"
-                }`}
-              >
-                <div className="text-sm text-gray-200 truncate">{project.name}</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${statusColors[project.status]}`}>
-                    {project.status}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
+          {isLoadingProjects ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="text-center py-4 text-gray-500 text-sm">
+              暂无项目，点击上方"新建项目"开始
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => handleSelectProject(project.id)}
+                  className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
+                    currentProjectId === project.id
+                      ? "bg-gray-800 border border-gray-700"
+                      : "hover:bg-gray-800/50 border border-transparent"
+                  }`}
+                >
+                  <div className="text-sm text-gray-200 truncate">{project.name}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${statusColors[project.status]}`}>
+                      {project.status}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 底部设置 */}

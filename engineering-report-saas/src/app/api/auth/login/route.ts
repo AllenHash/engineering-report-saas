@@ -31,11 +31,22 @@ export async function POST(request: NextRequest) {
       createdAt: user.createdAt.getTime()
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       token,
       user
     });
+
+    // 将token存储在httpOnly cookie中
+    response.cookies.set('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7天
+      path: '/',
+    });
+
+    return response;
 
   } catch (error) {
     console.error('登录错误:', error);
