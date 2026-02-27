@@ -11,6 +11,7 @@ import {
   Edit3,
   FileText,
   ChevronRight,
+  ChevronDown,
   Loader2,
   Check,
   X,
@@ -93,8 +94,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [streamedContent, setStreamedContent] = useState("");
   const [abortController, setAbortController] = useState<AbortController | null>(null);
 
-  // 导出PDF状态
+  // 导出状态
   const [isExporting, setIsExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'word' | 'markdown'>('pdf');
 
   // 项目信息编辑状态
   const [showProjectInfoEdit, setShowProjectInfoEdit] = useState(false);
@@ -666,10 +668,59 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     }
   };
 
-  // 导出PDF
-  const handleExportPDF = async () => {
+  // 导出文件
+  const handleExport = async () => {
     if (!report || isExporting) return;
 
+    // Word和Markdown格式直接调用后端API下载
+    if (exportFormat === 'word' || exportFormat === 'markdown') {
+      setIsExporting(true);
+      try {
+        const response = await fetch('/api/reports/export', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            reportId: report.id,
+            format: exportFormat,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '导出失败');
+        }
+
+        // 获取文件名
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `${report.title || '工程可行性报告'}`;
+        if (exportFormat === 'word') {
+          filename += '.docx';
+        } else {
+          filename += '.md';
+        }
+
+        // 下载文件
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (err: any) {
+        console.error('Export error:', err);
+        alert('导出' + (exportFormat === 'word' ? 'Word' : 'Markdown') + '失败: ' + (err.message || '未知错误'));
+      } finally {
+        setIsExporting(false);
+      }
+      return;
+    }
+
+    // PDF格式使用前端生成
     setIsExporting(true);
     try {
       // 创建临时容器用于渲染PDF内容
@@ -1188,27 +1239,48 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               )}
             </button>
 
-            {/* 导出PDF按钮 */}
-            <button
-              onClick={handleExportPDF}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all duration-200 hover:shadow-xl hover:shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 border border-blue-500/30"
-              style={{
-                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)'
-              }}
-            >
-              {isExporting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  导出中...
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  导出PDF
-                </>
-              )}
-            </button>
+            {/* 导出按钮和格式选择 */}
+            <div className="flex items-center gap-2">
+              {/* 格式选择下拉框 */}
+              <div className="relative">
+                <select
+                  value={exportFormat}
+                  onChange={(e) => setExportFormat(e.target.value as 'pdf' | 'word' | 'markdown')}
+                  className="appearance-none px-3 py-2 pr-8 rounded-xl text-sm font-medium text-white border border-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  style={{
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="pdf">PDF</option>
+                  <option value="word">Word</option>
+                  <option value="markdown">Markdown</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" />
+              </div>
+
+              {/* 导出按钮 */}
+              <button
+                onClick={handleExport}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all duration-200 hover:shadow-xl hover:shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 border border-blue-500/30"
+                style={{
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)'
+                }}
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    导出中...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    导出
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </header>
 
