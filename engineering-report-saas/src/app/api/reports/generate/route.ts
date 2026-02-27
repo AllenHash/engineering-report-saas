@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTemplateById } from "@/data/templates/outlines";
+import { getUserPoints, deductPointsWithRecord } from "@/lib/db";
+import { verifyToken } from "@/lib/auth";
+
+// 生成报告消耗的积分
+const REPORT_COST = 20;
 
 // API配置
-const getApiKey = () => process.env.SILICONFLOW_API_KEY || "sk-qqqmkuqspdfmtmdokzckygylkxktxgojlnqqadnxztenmtkh";
+const getApiKey = () => process.env.SILICONFLOW_API_KEY || "sk-couqaakwgtkgrivhntvorigljarpuyvsmfedappuvlctloeg";
 const API_URL = "https://api.siliconflow.cn/v1/chat/completions";
 
 // 生成章节内容的系统提示词
@@ -67,11 +72,34 @@ async function generateSection(
   }
 }
 
+// 从请求中获取用户ID
+function getUserIdFromRequest(request: NextRequest): string | null {
+  // 优先从 header 获取
+  const userId = request.headers.get("x-user-id");
+  if (userId) return userId;
+
+  // 从 cookie 获取
+  const token = request.cookies.get('auth_token')?.value;
+  if (!token) return null;
+
+  const payload = verifyToken(token);
+  return payload?.id || null;
+}
+
 // 生成完整报告
 export async function POST(request: NextRequest) {
+  let userId: string | null = null;
+
+  // 首先尝试获取用户ID用于积分检查
+  try {
+    userId = getUserIdFromRequest(request);
+  } catch (e) {
+    // 继续处理，允许未登录用户生成报告但不扣除积分
+  }
+
   try {
     const body = await request.json();
-    const { 
+    const {
       projectInfo,   // 项目信息：{ name, location, type, scale, investment }
       templateId,    // 大纲模板ID
       sections       // 要生成的章节列表（默认全部）
@@ -93,29 +121,100 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 确定要生成的章节
-    const sectionsToGenerate = sections || template.sections;
+    // 检查积分并扣除（如果有用户登录）
+    if (userId) {
+      const points = getUserPoints(userId);
+      if (points < REPORT_COST) {
+        return NextResponse.json(
+          {
+            error: `积分不足`,
+            code: 'INSUFFICIENT_POINTS',
+            required: REPORT_COST,
+            current: points,
+            message: `生成报告需要${REPORT_COST}积分，当前${points}积分，请先充值`
+          },
+          { status: 400 }
+        );
+      }
+
+      // 扣除积分并记录交易
+      const reportId = `report_${Date.now()}`;
+      const description = `生成报告: ${projectInfo.name || '工程可行性报告'}`;
+      const success = deductPointsWithRecord(userId, REPORT_COST, description, reportId);
+
+      if (!success) {
+        return NextResponse.json(
+          { error: "积分扣除失败" },
+          { status: 500 }
+        );
+      }
+
+      // 将报告ID返回给前端，后续可用于关联
+      body.generatedReportId = reportId;
+    }
+
+    // 确定要生成的章节（限制前3章，确保快速响应）
+    const sectionsToGenerate = (sections || template.sections).slice(0, 3);
+    
+    if (sectionsToGenerate.length === 0) {
+      return NextResponse.json(
+        { error: "没有可生成的章节" },
+        { status: 400 }
+      );
+    }
     
     // 生成报告标题
     const reportTitle = `${projectInfo.name || '工程'}可行性研究报告`;
     
-    // 生成每个章节
+    // 生成每个章节（并行处理提高速度）
     const generatedSections = [];
+    const sectionPromises = [];
     
     for (const section of sectionsToGenerate) {
-      console.log(`[Report] Generating section: ${section.title}`);
-      const content = await generateSection(section, projectInfo, template.name);
-      
+      console.log(`[Report] Queuing section: ${section.title}`);
+      sectionPromises.push(
+        generateSection(section, projectInfo, template.name)
+          .then(content => ({
+            id: section.id,
+            title: section.title,
+            content: content,
+            children: section.children?.map((child: any) => ({
+              id: child.id,
+              title: child.title,
+              content: ""  // 子章节内容可在后续生成
+            }))
+          }))
+          .catch(error => {
+            console.error(`[Report] Failed to generate section ${section.title}:`, error);
+            return {
+              id: section.id,
+              title: section.title,
+              content: "（章节内容生成失败，请稍后重试）",
+              children: []
+            };
+          })
+      );
+    }
+    
+    // 等待所有章节生成完成（带有超时控制）
+    const timeoutPromise = new Promise(resolve => setTimeout(() => {
+      resolve([]);
+    }, 30000)); // 30秒超时
+    
+    const sectionsResult = await Promise.race([
+      Promise.all(sectionPromises),
+      timeoutPromise
+    ]);
+    
+    if (Array.isArray(sectionsResult)) {
+      generatedSections.push(...sectionsResult);
+    } else {
+      // 超时情况，提供部分内容
       generatedSections.push({
-        id: section.id,
-        title: section.title,
-        content: content,
-        children: section.children?.map((child: any) => ({
-          id: child.id,
-          title: child.title,
-          // 可以进一步生成子章节内容，这里先留空
-          content: ""
-        }))
+        id: "1",
+        title: "概述",
+        content: "报告生成超时，请稍后重试或联系客服。",
+        children: []
       });
     }
 
@@ -128,12 +227,15 @@ export async function POST(request: NextRequest) {
       industry: template.industry,
       projectInfo: projectInfo,
       sections: generatedSections,
+      totalSections: template.sections.length,
+      generatedSections: generatedSections.length,
       createdAt: new Date().toISOString(),
-      status: "draft"
+      status: generatedSections.length > 0 ? "partial" : "failed"
     };
 
     return NextResponse.json({
-      success: true,
+      success: generatedSections.length > 0,
+      message: `生成完成（${generatedSections.length}/${sectionsToGenerate.length}个章节）`,
       report: fullReport
     });
 
