@@ -87,7 +87,7 @@
 - [x] **P1-1** 实现 PDF 导出功能 ✅ 已完成
   - 集成 jspdf + html2canvas
   - 生成符合规范的工程报告格式
-- [ ] **P1-2** 创建导出 API (/api/reports/export)
+- [x] **P1-2** 创建导出 API (/api/reports/export) ✅ 已完成
   - 支持 PDF/Word/Markdown 格式
 - [ ] **P1-3** 报告预览页面
   - 实时预览报告效果
