@@ -24,9 +24,14 @@ import {
   XCircle,
   Info,
   AlertTriangle,
+  Eye,
+  EyeOff,
+  PanelRightOpen,
+  PanelRightClose,
 } from "lucide-react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import ReportPreview from "@/components/ReportPreview";
 
 interface Section {
   id: string;
@@ -97,6 +102,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   // 导出状态
   const [isExporting, setIsExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'pdf' | 'word' | 'markdown'>('pdf');
+
+  // 预览状态
+  const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit');
+  const [showPreviewPanel, setShowPreviewPanel] = useState(true);
 
   // 项目信息编辑状态
   const [showProjectInfoEdit, setShowProjectInfoEdit] = useState(false);
@@ -1278,6 +1287,41 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                     <Download className="w-4 h-4" />
                     导出
                   </>
+                )}
+              </button>
+
+            {/* 预览模式切换 */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPreviewMode(previewMode === 'edit' ? 'preview' : 'edit')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 border ${
+                  previewMode === 'preview'
+                    ? 'text-white bg-gradient-to-r from-emerald-500 to-teal-600 border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/30'
+                    : 'text-white bg-gradient-to-r from-gray-600 to-gray-700 border-gray-500/30 hover:shadow-lg hover:from-gray-500 hover:to-gray-600'
+                }`}
+              >
+                {previewMode === 'preview' ? (
+                  <>
+                    <Edit3 className="w-4 h-4" />
+                    编辑
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4" />
+                    预览
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => setShowPreviewPanel(!showPreviewPanel)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white bg-gradient-to-r from-slate-600 to-slate-700 border border-slate-500/30 hover:shadow-lg hover:from-slate-500 hover:to-slate-600 transition-all duration-200"
+                title={showPreviewPanel ? "隐藏预览面板" : "显示预览面板"}
+              >
+                {showPreviewPanel ? (
+                  <PanelRightClose className="w-4 h-4" />
+                ) : (
+                  <PanelRightOpen className="w-4 h-4" />
                 )}
               </button>
             </div>
