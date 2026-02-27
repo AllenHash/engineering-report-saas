@@ -446,7 +446,7 @@ export default function Home() {
         <div className="p-3">
           <button
             onClick={handleNewProject}
-            className="w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98]"
+            className="w-full rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 flex items-center justify-center gap-2 hover:shadow-xl hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] border border-amber-500/30"
             style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, #b45309 100%)' }}
           >
             <Plus className="w-4 h-4" />
@@ -472,14 +472,17 @@ export default function Home() {
                 <button
                   key={project.id}
                   onClick={() => handleSelectProject(project.id)}
-                  className="w-full rounded-lg px-3 py-3 text-left transition-all duration-200 hover:translate-x-1 hover:bg-white/5 hover:scale-[1.01]"
+                  className="w-full rounded-xl px-4 py-3.5 text-left transition-all duration-200 hover:translate-x-1 hover:bg-white/5 hover:scale-[1.01] hover:shadow-lg hover:shadow-amber-500/10"
                   style={{
                     background: currentProjectId === project.id
                       ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%)'
-                      : 'transparent',
+                      : 'var(--bg-secondary)',
                     border: currentProjectId === project.id
-                      ? '1px solid rgba(245, 158, 11, 0.3)'
-                      : '1px solid transparent',
+                      ? '1px solid rgba(245, 158, 11, 0.4)'
+                      : '1px solid var(--border-color)',
+                    boxShadow: currentProjectId === project.id
+                      ? '0 4px 12px rgba(245, 158, 11, 0.15)'
+                      : 'none',
                   }}
                 >
                   <div className="flex items-center justify-between">
@@ -502,7 +505,7 @@ export default function Home() {
 
         {/* 底部设置 */}
         <div className="border-t p-3" style={{ borderColor: 'var(--border-color)' }}>
-          <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 hover:bg-white/10 hover:scale-[1.02]" style={{ color: 'var(--text-secondary)' }}>
+          <button className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm transition-all duration-200 hover:bg-white/10 hover:scale-[1.02] hover:shadow-lg hover:shadow-white/5 border border-transparent hover:border-white/10" style={{ color: 'var(--text-secondary)' }}>
             <Settings className="w-4 h-4" />
             <span>设置</span>
           </button>
@@ -530,16 +533,16 @@ export default function Home() {
             )}
             <a
               href="/profile"
-              className="rounded-lg px-3 py-1.5 text-xs flex items-center gap-2 transition-all duration-200 hover:bg-white/10 hover:scale-[1.02]"
-              style={{ color: 'var(--text-secondary)', background: 'var(--bg-tertiary)' }}
+              className="rounded-xl px-4 py-2 text-xs flex items-center gap-2 transition-all duration-200 hover:bg-white/10 hover:scale-[1.02] hover:shadow-lg hover:shadow-white/5 border"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', borderColor: 'var(--border-color)' }}
             >
               <User className="w-3 h-3" />
               账号管理
             </a>
             <button
               onClick={logout}
-              className="rounded-lg px-3 py-1.5 text-xs flex items-center gap-2 transition-all duration-200 hover:bg-red-500/20 hover:scale-[1.02]"
-              style={{ color: '#f87171', background: 'rgba(239, 68, 68, 0.1)' }}
+              className="rounded-xl px-4 py-2 text-xs flex items-center gap-2 transition-all duration-200 hover:bg-red-500/20 hover:scale-[1.02] hover:shadow-lg hover:shadow-red-500/10 border"
+              style={{ color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }}
             >
               <LogOut className="w-3 h-3" />
               退出
@@ -548,7 +551,7 @@ export default function Home() {
               <button
                 onClick={handleGenerateReport}
                 disabled={isGenerating}
-                className="rounded-lg px-4 py-1.5 text-xs font-medium text-white flex items-center gap-2 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
+                className="rounded-xl px-4 py-2 text-xs font-medium text-white flex items-center gap-2 transition-all duration-200 hover:shadow-xl hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 border border-emerald-500/30"
                 style={{ background: 'linear-gradient(135deg, var(--accent-success) 0%, #059669 100%)' }}
               >
                 {isGenerating ? (
@@ -566,8 +569,8 @@ export default function Home() {
             )}
             <button
               onClick={() => setShowRightPanel(!showRightPanel)}
-              className="rounded-lg px-3 py-1.5 text-xs flex items-center gap-2 transition-all duration-200 hover:bg-white/10 hover:scale-[1.02]"
-              style={{ color: 'var(--text-secondary)', background: 'var(--bg-tertiary)' }}
+              className="rounded-xl px-4 py-2 text-xs flex items-center gap-2 transition-all duration-200 hover:bg-white/10 hover:scale-[1.02] hover:shadow-lg hover:shadow-white/5 border"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', borderColor: 'var(--border-color)' }}
             >
               {showRightPanel ? (
                 <>
@@ -594,16 +597,16 @@ export default function Home() {
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 transition-all duration-200 ${
+                  className={`max-w-[80%] rounded-2xl px-5 py-4 transition-all duration-200 ${
                     message.role === "user"
-                      ? "text-white"
-                      : "text-gray-100"
+                      ? "text-white border border-blue-500/30"
+                      : "text-gray-100 border border-slate-600/50"
                   }`}
                   style={{
                     background: message.role === "user"
                       ? 'linear-gradient(135deg, var(--accent-secondary) 0%, #1d4ed8 100%)'
                       : 'linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%)',
-                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                    boxShadow: '0 4px 24px rgba(0, 0, 0, 0.3)',
                   }}
                 >
                   <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
@@ -639,10 +642,11 @@ export default function Home() {
         <footer className="border-t px-4 py-4" style={{ borderColor: 'var(--border-color)', background: 'rgba(15, 23, 42, 0.9)' }}>
           <div className="mx-auto max-w-3xl">
             <div
-              className="flex gap-3 rounded-xl p-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-amber-500/30"
+              className="flex gap-3 rounded-2xl p-3 transition-all duration-200 focus-within:ring-2 focus-within:ring-amber-500/50 focus-within:border-amber-500/50"
               style={{
                 background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)'
+                border: '1px solid var(--border-color)',
+                boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.2)',
               }}
             >
               <textarea
@@ -650,18 +654,19 @@ export default function Home() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="描述你的项目需求..."
-                className="flex-1 resize-none rounded-lg px-4 py-3 text-sm transition-colors bg-transparent focus:outline-none placeholder:text-[var(--text-muted)]"
+                className="flex-1 resize-none rounded-xl px-4 py-2.5 text-sm transition-colors bg-transparent focus:outline-none placeholder:text-[var(--text-muted)]"
                 style={{
                   color: 'var(--text-primary)',
                   minHeight: "44px",
-                  maxHeight: "120px"
+                  maxHeight: "120px",
+                  background: 'var(--bg-tertiary)',
                 }}
                 rows={1}
               />
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
-                className="rounded-lg px-5 py-2 text-sm font-medium flex items-center gap-2 transition-all duration-200 hover:shadow-lg hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 text-white"
+                className="rounded-xl px-5 py-2.5 text-sm font-medium flex items-center gap-2 transition-all duration-200 hover:shadow-xl hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 text-white border border-amber-500/30"
                 style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, #b45309 100%)' }}
               >
                 <Send className="w-4 h-4" />
@@ -676,26 +681,32 @@ export default function Home() {
       {showRightPanel && (
         <aside className={`w-96 flex-shrink-0 flex flex-col border-l transition-all duration-300 ease-in-out ${isLoaded ? 'animate-fade-in-right' : 'opacity-0'}`} style={{ borderColor: 'var(--border-color)', background: 'var(--bg-primary)' }}>
           {/* 标签页切换 */}
-          <div className="flex items-center border-b" style={{ borderColor: 'var(--border-color)' }}>
+          <div className="flex items-center border-b" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-secondary)' }}>
             <button
               onClick={() => setRightTab("report")}
-              className="flex-1 py-3 text-sm font-medium transition-all duration-200 hover:bg-white/5"
+              className="flex-1 py-4 text-sm font-medium transition-all duration-200 hover:bg-white/5 border-b-2"
               style={{
                 color: rightTab === "report" ? 'var(--accent-secondary)' : 'var(--text-secondary)',
-                borderBottom: rightTab === "report" ? '2px solid var(--accent-secondary)' : '2px solid transparent'
+                borderBottom: rightTab === "report" ? '2px solid var(--accent-secondary)' : '2px solid transparent',
+                background: rightTab === "report" ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
               }}
             >
-              <FileText className="w-4 h-4" /> 报告预览
+              <span className="flex items-center justify-center gap-2">
+                <FileText className="w-4 h-4" /> 报告预览
+              </span>
             </button>
             <button
               onClick={() => setRightTab("file")}
-              className="flex-1 py-3 text-sm font-medium transition-all duration-200 hover:bg-white/5"
+              className="flex-1 py-4 text-sm font-medium transition-all duration-200 hover:bg-white/5 border-b-2"
               style={{
                 color: rightTab === "file" ? 'var(--accent-secondary)' : 'var(--text-secondary)',
-                borderBottom: rightTab === "file" ? '2px solid var(--accent-secondary)' : '2px solid transparent'
+                borderBottom: rightTab === "file" ? '2px solid var(--accent-secondary)' : '2px solid transparent',
+                background: rightTab === "file" ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
               }}
             >
-              <FolderOpen className="w-4 h-4" /> 文件预览
+              <span className="flex items-center justify-center gap-2">
+                <FolderOpen className="w-4 h-4" /> 文件预览
+              </span>
             </button>
           </div>
 
@@ -711,14 +722,14 @@ export default function Home() {
                   <div className="flex gap-2">
                     <button
                       onClick={exportReport}
-                      className="rounded px-2 py-1 text-xs transition-all duration-200 hover:bg-white/10 hover:scale-[1.02]"
-                      style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      className="rounded-lg px-3 py-1.5 text-xs transition-all duration-200 hover:bg-white/10 hover:scale-[1.02] hover:shadow-lg border"
+                      style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', borderColor: 'var(--border-color)' }}
                     >
                       <FileEdit className="w-3 h-3" /> Markdown
                     </button>
                     <button
                       onClick={exportReportPDF}
-                      className="rounded px-2 py-1 text-xs text-white transition-all duration-200 hover:bg-blue-600 hover:scale-[1.02]"
+                      className="rounded-lg px-3 py-1.5 text-xs text-white transition-all duration-200 hover:bg-blue-600 hover:scale-[1.02] hover:shadow-lg hover:shadow-blue-500/20 border border-blue-400/30"
                       style={{ background: 'var(--accent-secondary)' }}
                     >
                       <FileCheck className="w-3 h-3" /> PDF
@@ -744,10 +755,11 @@ export default function Home() {
                       {reportData.sections.map((section) => (
                         <div
                           key={section.id}
-                          className="rounded-lg border p-3 transition-all duration-200 hover:scale-[1.01] hover:shadow-lg hover:border-amber-500/30"
+                          className="rounded-xl border p-4 transition-all duration-200 hover:scale-[1.01] hover:shadow-xl hover:shadow-amber-500/10 hover:border-amber-500/30"
                           style={{
                             borderColor: 'var(--border-color)',
-                            background: 'var(--bg-secondary)'
+                            background: 'var(--bg-secondary)',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
                           }}
                         >
                           <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{section.title}</h3>
