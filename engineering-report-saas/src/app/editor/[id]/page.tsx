@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -22,6 +22,8 @@ import {
   Zap,
   XCircle,
 } from "lucide-react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 interface Section {
   id: string;
@@ -77,6 +79,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [generatedReport, setGeneratedReport] = useState<any | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+
+  // 导出PDF状态
+  const [isExporting, setIsExporting] = useState(false);
 
   // 加载报告数据
   useEffect(() => {
@@ -283,6 +288,109 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     // 激活第一个章节
     if (generatedReport.sections.length > 0) {
       setActiveSectionId(generatedReport.sections[0].id);
+    }
+  };
+
+  // 导出PDF
+  const handleExportPDF = async () => {
+    if (!report || isExporting) return;
+
+    setIsExporting(true);
+    try {
+      // 创建临时容器用于渲染PDF内容
+      const container = document.createElement('div');
+      container.style.width = '794px'; // A4 width at 96 DPI
+      container.style.padding = '40px';
+      container.style.background = '#ffffff';
+      container.style.color = '#000000';
+      container.style.fontFamily = 'SimSun, "Songti SC", serif'; // 宋体支持中文
+      container.style.fontSize = '12px';
+      container.style.lineHeight = '1.6';
+
+      // 构建HTML内容
+      let htmlContent = `
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">${report.title || '工程可行性研究报告'}</h1>
+          <p style="font-size: 12px; color: #666;">${report.templateName || ''}</p>
+        </div>
+      `;
+
+      // 项目信息
+      if (report.projectInfo) {
+        htmlContent += `<div style="margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 4px;">`;
+        htmlContent += `<h2 style="font-size: 14px; font-weight: bold; margin-bottom: 10px;">项目信息</h2>`;
+        if (report.projectInfo.name) {
+          htmlContent += `<p>项目名称：${report.projectInfo.name}</p>`;
+        }
+        if (report.projectInfo.location) {
+          htmlContent += `<p>建设地点：${report.projectInfo.location}</p>`;
+        }
+        if (report.projectInfo.type) {
+          htmlContent += `<p>项目类型：${report.projectInfo.type}</p>`;
+        }
+        if (report.projectInfo.scale) {
+          htmlContent += `<p>建设规模：${report.projectInfo.scale}</p>`;
+        }
+        if (report.projectInfo.investment) {
+          htmlContent += `<p>总投资：${report.projectInfo.investment}</p>`;
+        }
+        htmlContent += `</div>`;
+      }
+
+      // 章节内容
+      htmlContent += '<div style="margin-top: 20px;">';
+      for (const section of report.sections) {
+        htmlContent += `
+          <div style="margin-bottom: 25px; page-break-inside: avoid;">
+            <h2 style="font-size: 16px; font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #ddd;">${section.title}</h2>
+            <div style="white-space: pre-wrap; text-align: justify;">${section.content || ''}</div>
+          </div>
+        `;
+      }
+      htmlContent += '</div>';
+
+      container.innerHTML = htmlContent;
+      document.body.appendChild(container);
+
+      // 使用html2canvas截取内容
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      // 清理临时容器
+      document.body.removeChild(container);
+
+      // 使用jsPDF生成PDF
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // 第一页
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // 后续页面
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      // 下载PDF
+      pdf.save(`${report.title || '工程可行性报告'}.pdf`);
+    } catch (err: any) {
+      console.error('Export PDF error:', err);
+      alert('导出PDF失败: ' + (err.message || '未知错误'));
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -636,6 +744,28 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 <>
                   <Sparkles className="w-4 h-4" />
                   AI生成报告
+                </>
+              )}
+            </button>
+
+            {/* 导出PDF按钮 */}
+            <button
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all duration-200 hover:shadow-xl hover:shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 border border-blue-500/30"
+              style={{
+                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)'
+              }}
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  导出中...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  导出PDF
                 </>
               )}
             </button>
