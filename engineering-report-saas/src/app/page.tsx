@@ -20,7 +20,6 @@ import {
   Ruler,
   DollarSign,
   Construction,
-  Highway,
   Building2,
   Leaf,
   Plus,
@@ -55,7 +54,7 @@ interface Section {
 interface Project {
   id: string;
   name: string;
-  status: "进行中" | "已完成" | "待审批";
+  status: "进行中" | "已完成" | "待审批" | "生成中";
   updatedAt: Date;
 }
 
@@ -637,13 +636,13 @@ export default function Home() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="描述你的项目需求..."
-                className="flex-1 resize-none rounded-lg px-4 py-3 text-sm transition-colors bg-transparent focus:outline-none"
+                className="flex-1 resize-none rounded-lg px-4 py-3 text-sm transition-colors bg-transparent focus:outline-none placeholder:text-[var(--text-muted)]"
                 style={{
                   color: 'var(--text-primary)',
-                  '::placeholder': { color: 'var(--text-muted)' }
+                  minHeight: "44px",
+                  maxHeight: "120px"
                 }}
                 rows={1}
-                style={{ minHeight: "44px", maxHeight: "120px" }}
               />
               <button
                 onClick={handleSend}
@@ -661,26 +660,26 @@ export default function Home() {
 
       {/* 右侧栏 - 报告预览/文件预览 (可收起) */}
       {showRightPanel && (
-        <aside className="w-96 flex-shrink-0 flex flex-col border-l border-gray-800 bg-gray-950">
+        <aside className="w-96 flex-shrink-0 flex flex-col border-l" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-primary)' }}>
           {/* 标签页切换 */}
-          <div className="flex items-center border-b border-gray-800">
+          <div className="flex items-center border-b" style={{ borderColor: 'var(--border-color)' }}>
             <button
               onClick={() => setRightTab("report")}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                rightTab === "report"
-                  ? "text-blue-400 border-b-2 border-blue-400"
-                  : "text-gray-400 hover:text-gray-300"
-              }`}
+              className="flex-1 py-3 text-sm font-medium transition-colors"
+              style={{
+                color: rightTab === "report" ? 'var(--accent-secondary)' : 'var(--text-secondary)',
+                borderBottom: rightTab === "report" ? '2px solid var(--accent-secondary)' : '2px solid transparent'
+              }}
             >
               📄 报告预览
             </button>
             <button
               onClick={() => setRightTab("file")}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                rightTab === "file"
-                  ? "text-blue-400 border-b-2 border-blue-400"
-                  : "text-gray-400 hover:text-gray-300"
-              }`}
+              className="flex-1 py-3 text-sm font-medium transition-colors"
+              style={{
+                color: rightTab === "file" ? 'var(--accent-secondary)' : 'var(--text-secondary)',
+                borderBottom: rightTab === "file" ? '2px solid var(--accent-secondary)' : '2px solid transparent'
+              }}
             >
               📁 文件预览
             </button>
@@ -689,22 +688,24 @@ export default function Home() {
           {/* 报告预览内容 */}
           {rightTab === "report" && (
             <>
-              <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+              <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--border-color)' }}>
                 <div className="flex items-center gap-2">
                   <span className="text-base">📄</span>
-                  <span className="text-sm font-medium text-white">报告预览</span>
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>报告预览</span>
                 </div>
                 {reportData && (
                   <div className="flex gap-2">
                     <button
                       onClick={exportReport}
-                      className="rounded bg-gray-700 px-2 py-1 text-xs text-white hover:bg-gray-600"
+                      className="rounded px-2 py-1 text-xs transition-colors"
+                      style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     >
                       📝 Markdown
                     </button>
                     <button
                       onClick={exportReportPDF}
-                      className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
+                      className="rounded px-2 py-1 text-xs text-white transition-colors"
+                      style={{ background: 'var(--accent-secondary)' }}
                     >
                       📄 PDF
                     </button>
@@ -715,10 +716,10 @@ export default function Home() {
               <div className="flex-1 overflow-y-auto p-4">
                 {reportData ? (
                   <div className="space-y-4">
-                    <div className="border-b border-gray-800 pb-3">
-                      <h2 className="text-base font-semibold text-white">{reportData.title}</h2>
-                      <p className="mt-1 text-xs text-gray-400">{reportData.templateName}</p>
-                      <div className="mt-2 text-xs text-gray-500">
+                    <div className="border-b pb-3" style={{ borderColor: 'var(--border-color)' }}>
+                      <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{reportData.title}</h2>
+                      <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>{reportData.templateName}</p>
+                      <div className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
                         <div>📍 {reportData.projectInfo.location}</div>
                         <div>📐 {reportData.projectInfo.scale}</div>
                         <div>💰 {reportData.projectInfo.investment}</div>
@@ -727,9 +728,16 @@ export default function Home() {
 
                     <div className="space-y-3">
                       {reportData.sections.map((section) => (
-                        <div key={section.id} className="rounded-lg border border-gray-800 bg-gray-900 p-3">
-                          <h3 className="mb-2 text-sm font-medium text-gray-200">{section.title}</h3>
-                          <div className="text-xs text-gray-400 whitespace-pre-wrap">
+                        <div
+                          key={section.id}
+                          className="rounded-lg border p-3"
+                          style={{
+                            borderColor: 'var(--border-color)',
+                            background: 'var(--bg-secondary)'
+                          }}
+                        >
+                          <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{section.title}</h3>
+                          <div className="text-xs whitespace-pre-wrap" style={{ color: 'var(--text-secondary)' }}>
                             {section.content || "（等待生成...）"}
                           </div>
                         </div>
@@ -737,14 +745,14 @@ export default function Home() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex h-full flex-col items-center justify-center text-gray-500">
+                  <div className="flex h-full flex-col items-center justify-center" style={{ color: 'var(--text-muted)' }}>
                     <div className="mb-3 text-3xl">📄</div>
                     <p className="text-sm">完成对话后，点击"生成完整报告"</p>
                     <p className="mt-1 text-xs">我会根据您提供的信息生成完整报告</p>
 
                     {projectInfo && (
-                      <div className="mt-4 rounded-lg border border-gray-700 bg-gray-900 p-3 text-xs">
-                        <div className="text-gray-400 mb-2">当前项目信息：</div>
+                      <div className="mt-4 rounded-lg border p-3 text-xs" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-secondary)' }}>
+                        <div className="mb-2" style={{ color: 'var(--text-secondary)' }}>当前项目信息：</div>
                         {projectInfo.name && <div>📛 名称：{projectInfo.name}</div>}
                         {projectInfo.location && <div>📍 地点：{projectInfo.location}</div>}
                         {projectInfo.type && <div>🏗️ 类型：{projectInfo.type}</div>}
@@ -759,7 +767,7 @@ export default function Home() {
           {/* 文件预览内容 */}
           {rightTab === "file" && (
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="flex h-full flex-col items-center justify-center text-gray-500">
+              <div className="flex h-full flex-col items-center justify-center" style={{ color: 'var(--text-muted)' }}>
                 <div className="mb-3 text-3xl">📁</div>
                 <p className="text-sm">暂无文件</p>
                 <p className="mt-1 text-xs">生成的报告文件将在这里显示</p>
