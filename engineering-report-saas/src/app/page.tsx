@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { downloadPDF } from "@/lib/pdf-export";
 
@@ -73,6 +74,7 @@ interface ReportData {
 }
 
 export default function Home() {
+  const router = useRouter();
   const { user, logout, loading } = useAuth();
 
   // 页面加载动画状态
@@ -295,63 +297,8 @@ export default function Home() {
       return;
     }
 
-    // 在数据库中创建新报告
-    try {
-      const res = await fetch("/api/reports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "新项目 " + (projects.length + 1),
-          projectInfo: {},
-          sections: [],
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.success && data.report) {
-        const newProject: Project = {
-          id: data.report.id,
-          name: data.report.title,
-          status: "进行中",
-          updatedAt: new Date()
-        };
-        setProjects(prev => [newProject, ...prev]);
-        setCurrentProjectId(newProject.id);
-      } else {
-        // 如果API失败，使用本地创建
-        const newProject: Project = {
-          id: Date.now().toString(),
-          name: "新项目 " + (projects.length + 1),
-          status: "进行中",
-          updatedAt: new Date()
-        };
-        setProjects(prev => [newProject, ...prev]);
-        setCurrentProjectId(newProject.id);
-      }
-    } catch (err) {
-      console.error("Create project error:", err);
-      // 使用本地创建作为后备
-      const newProject: Project = {
-        id: Date.now().toString(),
-        name: "新项目 " + (projects.length + 1),
-        status: "进行中",
-        updatedAt: new Date()
-      };
-      setProjects(prev => [newProject, ...prev]);
-      setCurrentProjectId(newProject.id);
-    }
-
-    setMessages([
-      {
-        id: "1",
-        role: "assistant",
-        content: "你好，你需要写一份什么报告？\n\n我可以帮你编写：\n- 公路工程\n- 市政工程\n- 生态环境工程",
-        timestamp: new Date(),
-      },
-    ]);
-    setProjectInfo(null);
-    setReportData(null);
+    // 跳转到新建报告页面，让用户选择模板和填写项目信息
+    router.push("/editor/new");
   };
 
   // 切换项目

@@ -10,9 +10,9 @@ import {
   ArrowLeft,
   Plus,
   Building2,
-  Road,
-  Trees,
-  Plane,
+  Waypoints,
+  TreeDeciduous,
+  Rocket,
   Zap,
   Droplets,
   Factory,
@@ -32,8 +32,8 @@ interface Template {
   name: string;
   industry: string;
   sections: OutlineSection[];
-  isPremium: boolean;
-  pointsRequired: number;
+  isPremium?: boolean;
+  pointsRequired?: number;
 }
 
 export default function NewReportPage() {
@@ -59,10 +59,10 @@ export default function NewReportPage() {
   // 项目类型选项
   const projectTypes = [
     { value: "房建", label: "房屋建筑工程", icon: Building2 },
-    { value: "市政道路", label: "市政道路工程", icon: Road },
+    { value: "市政道路", label: "市政道路工程", icon: Waypoints },
     { value: "市政管网", label: "市政管网工程", icon: Droplets },
-    { value: "生态环境", label: "生态环境工程", icon: Trees },
-    { value: "交通", label: "交通枢纽工程", icon: Plane },
+    { value: "生态环境", label: "生态环境工程", icon: TreeDeciduous },
+    { value: "交通", label: "交通枢纽工程", icon: Rocket },
     { value: "电力", label: "电力工程", icon: Zap },
     { value: "工业", label: "工业厂房工程", icon: Factory },
   ];
@@ -72,11 +72,22 @@ export default function NewReportPage() {
     fetch("/api/templates")
       .then(res => res.json())
       .then(data => {
-        // API返回 templates 数组
+        // API返回 templates 数组，包含 sections 字段
         if (data.templates && Array.isArray(data.templates)) {
-          setTemplates(data.templates);
+          // 确保模板数据完整，添加默认字段
+          const processedTemplates = data.templates.map((t: any) => ({
+            ...t,
+            isPremium: t.isPremium || false,
+            pointsRequired: t.pointsRequired || 0
+          }));
+          setTemplates(processedTemplates);
         } else if (data.success && data.templates) {
-          setTemplates(data.templates);
+          const processedTemplates = data.templates.map((t: any) => ({
+            ...t,
+            isPremium: t.isPremium || false,
+            pointsRequired: t.pointsRequired || 0
+          }));
+          setTemplates(processedTemplates);
         }
       })
       .catch(err => console.error("Failed to load templates:", err))
@@ -90,7 +101,7 @@ export default function NewReportPage() {
     }
   }, [user, authLoading, router]);
 
-  const handleSelectTemplate = (template: Template) => {
+  const handleSelectTemplate = (template: Template | null) => {
     setSelectedTemplate(template);
     setStep("info");
   };
@@ -236,7 +247,7 @@ export default function NewReportPage() {
                         <h3 className="text-base font-medium text-white mb-1">{template.name}</h3>
                         <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{template.industry}</p>
                         <div className="flex flex-wrap gap-1">
-                          {template.outline.slice(0, 3).map((chapter) => (
+                          {(template.sections || []).slice(0, 3).map((chapter) => (
                             <span
                               key={chapter.id}
                               className="text-xs px-2 py-0.5 rounded-full"
@@ -245,9 +256,9 @@ export default function NewReportPage() {
                               {chapter.title}
                             </span>
                           ))}
-                          {template.outline.length > 3 && (
+                          {(template.sections?.length || 0) > 3 && (
                             <span className="text-xs px-2 py-0.5" style={{ color: 'var(--text-muted)' }}>
-                              +{template.outline.length - 3}章
+                              +{template.sections.length - 3}章
                             </span>
                           )}
                         </div>
