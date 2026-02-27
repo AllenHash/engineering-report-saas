@@ -82,6 +82,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [generatedReport, setGeneratedReport] = useState<any | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | null>(null);
+  const [generatedSectionCount, setGeneratedSectionCount] = useState(0);
+  const [totalSectionCount, setTotalSectionCount] = useState(0);
 
   // 单章节流式生成状态
   const [isGeneratingSection, setIsGeneratingSection] = useState(false);
@@ -537,6 +541,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     setGenerationCurrentSection("");
     setGenerationError(null);
     setGeneratedReport(null);
+    setGenerationStartTime(Date.now());
+    setEstimatedTimeRemaining(null);
+    setGeneratedSectionCount(0);
+    setTotalSectionCount(report.sections.length || 10);
 
     try {
       const response = await fetch('/api/reports/generate', {
@@ -582,6 +590,20 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 setGenerationProgress(data.progress);
                 setGenerationMessage(data.message || '');
                 setGenerationCurrentSection(data.currentSection || '');
+                // 保存已生成和总数
+                if (data.generated !== undefined) {
+                  setGeneratedSectionCount(data.generated);
+                }
+                if (data.totalSections !== undefined) {
+                  setTotalSectionCount(data.totalSections);
+                }
+                // 计算预估剩余时间
+                if (generationStartTime && data.progress > 0) {
+                  const elapsed = Date.now() - generationStartTime;
+                  const estimatedTotal = (elapsed / data.progress) * 100;
+                  const remaining = Math.round((estimatedTotal - elapsed) / 1000);
+                  setEstimatedTimeRemaining(remaining);
+                }
               }
 
               // 处理完成事件
@@ -589,6 +611,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 setGeneratedReport(data.report);
                 setGenerationProgress(100);
                 setGenerationMessage('生成完成！');
+                setEstimatedTimeRemaining(0);
               }
             } catch (e) {
               console.error('Parse SSE error:', e);
