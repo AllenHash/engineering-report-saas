@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, verifyPassword } from '@/lib/db';
+import { verifyPassword } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -14,8 +14,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 查找用户
-    const user = getUserByEmail(email);
+    // 验证密码（内部已包含用户查询）
+    const user = await verifyPassword(email, password);
     if (!user) {
       return NextResponse.json(
         { success: false, error: '邮箱或密码错误' },
@@ -23,24 +23,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证密码
-    if (!verifyPassword(user, password)) {
-      return NextResponse.json(
-        { success: false, error: '邮箱或密码错误' },
-        { status: 401 }
-      );
-    }
-
-    // 生成token
-    const token = generateToken(user);
-
-    // 返回用户信息（不含密码）
-    const { passwordHash, ...userWithoutPassword } = user;
+    // 生成token（转换createdAt为字符串以匹配UserPayload类型）
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      nickname: user.nickname,
+      createdAt: user.createdAt.getTime()
+    });
 
     return NextResponse.json({
       success: true,
       token,
-      user: userWithoutPassword
+      user
     });
 
   } catch (error) {

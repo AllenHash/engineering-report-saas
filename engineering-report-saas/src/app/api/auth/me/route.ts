@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const user = getUserById(payload.id);
+    const user = await getUserById(payload.id);
     
     if (!user) {
       return NextResponse.json(
@@ -38,15 +38,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const points = getUserPoints(user.id);
+    const points = await getUserPoints(user.id);
 
     return NextResponse.json({
       success: true,
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
-        phone: user.phone,
+        name: user.nickname,
         points
       }
     });

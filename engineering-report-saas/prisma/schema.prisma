@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// 用户表
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  nickname     String
+  points       Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  reports           Report[]
+  pointTransactions PointTransaction[]
+}
+
+// 报告表
+model Report {
+  id           String   @id @default(uuid())
+  userId       String
+  title        String
+  templateId   String?
+  templateName String?
+  projectInfo  String   @default("{}") // JSON 存储为字符串
+  sections     String   @default("[]") // JSON 存储为字符串
+  status       String   @default("draft") // draft/generating/completed
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// 模板表
+model Template {
+  id           String   @id @default(uuid())
+  name         String
+  industry     String
+  version      String
+  outline      String   @default("[]") // JSON 存储为字符串
+  isPremium    Boolean  @default(false)
+  pointsRequired Int    @default(0)
+  usageCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// 积分记录表
+model PointTransaction {
+  id           String   @id @default(uuid())
+  userId       String
+  type         String   // earn/spend/recharge
+  amount       Int
+  balanceAfter Int
+  description  String
+  referenceId  String?  // 关联的业务ID
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

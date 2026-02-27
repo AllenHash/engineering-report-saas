@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createUser } from '@/lib/db';
+import { createUser, getUserByEmail } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
+import { Prisma } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,15 +32,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 检查邮箱是否已存在
+    const existingUser = await getUserByEmail(email);
+    if (existingUser) {
+      return NextResponse.json(
+        { success: false, error: '该邮箱已被注册' },
+        { status: 400 }
+      );
+    }
+
     // 创建用户
-    const user = createUser({ email, name, password });
+    const user = await createUser({ email, nickname: name, password });
 
     // 生成token
     const token = generateToken({
       id: user.id,
       email: user.email,
-      name: user.name,
-      createdAt: user.createdAt
+      nickname: user.nickname,
+      createdAt: user.createdAt.getTime()
     });
 
     return NextResponse.json({
@@ -51,12 +61,14 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('注册错误:', error);
 
-    // 处理已存在的用户
-    if (error.message?.includes('邮箱已被注册')) {
-      return NextResponse.json(
-        { success: false, error: '该邮箱已被注册' },
-        { status: 400 }
-      );
+    // 处理已存在的用户 (Prisma 错误)
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        return NextResponse.json(
+          { success: false, error: '该邮箱已被注册' },
+          { status: 400 }
+        );
+      }
     }
 
     return NextResponse.json(

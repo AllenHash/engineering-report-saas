@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     // 检查积分并扣除（如果有用户登录）
     if (userId) {
-      const points = getUserPoints(userId);
+      const points = await getUserPoints(userId);
       if (points < REPORT_COST) {
         return NextResponse.json(
           {
