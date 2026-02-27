@@ -21,6 +21,8 @@ import {
   Sparkles,
   Zap,
   XCircle,
+  Info,
+  AlertTriangle,
 } from "lucide-react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -82,6 +84,23 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   // 导出PDF状态
   const [isExporting, setIsExporting] = useState(false);
+
+  // 项目信息编辑状态
+  const [showProjectInfoEdit, setShowProjectInfoEdit] = useState(false);
+  const [editingProjectInfo, setEditingProjectInfo] = useState<ProjectInfo>({});
+  const [isSavingProjectInfo, setIsSavingProjectInfo] = useState(false);
+
+  // 联动提示状态
+  const [showLinkageModal, setShowLinkageModal] = useState(false);
+  const [linkageChanges, setLinkageChanges] = useState<{
+    changedField: string;
+    oldValue: string;
+    newValue: string;
+    affectedSections: Section[];
+  } | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenProgress, setRegenProgress] = useState(0);
+  const [regenMessage, setRegenMessage] = useState("");
 
   // 加载报告数据
   useEffect(() => {
@@ -155,6 +174,190 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
     return () => clearTimeout(timeoutId);
   }, [report?.sections]);
+
+  // 关键信息与受影响章节的映射关系
+  const getAffectedSections = (changedField: string, sections: Section[]): Section[] => {
+    const fieldKeywords: Record<string, string[]> = {
+      // 项目名称影响全部章节
+      name: [],
+      // 建设地点影响：背景分析、选址方案、环境影响
+      location: ['背景', '项目', '选址', '位置', '环境', '保护', '区域'],
+      // 建设规模影响：工程方案、设计方案、投资估算、财务评价
+      scale: ['工程', '方案', '设计', '投资', '估算', '财务', '评价', '规模', '建设'],
+      // 投资估算影响：投资估算、财务评价、资金筹措
+      investment: ['投资', '估算', '财务', '评价', '资金', '筹措', '经济']
+    };
+
+    const keywords = fieldKeywords[changedField] || [];
+
+    // 如果是项目名称变更，影响所有章节
+    if (changedField === 'name') {
+      return sections;
+    }
+
+    // 否则，根据关键词匹配受影响的章节
+    return sections.filter(section => {
+      const title = section.title.toLowerCase();
+      return keywords.some(keyword => title.includes(keyword));
+    });
+  };
+
+  // 分析变更影响并显示提示
+  const analyzeLinkage = (field: keyof ProjectInfo, oldValue: string, newValue: string) => {
+    if (!report || field === 'type') return; // type字段不影响章节内容
+
+    const affectedSections = getAffectedSections(field, report.sections);
+
+    if (affectedSections.length > 0) {
+      setLinkageChanges({
+        changedField: field,
+        oldValue,
+        newValue,
+        affectedSections
+      });
+      setShowLinkageModal(true);
+    } else {
+      // 没有受影响的章节，直接保存
+      handleSaveProjectInfo();
+    }
+  };
+
+  // 打开项目信息编辑弹窗
+  const openProjectInfoEdit = () => {
+    if (!report) return;
+    setEditingProjectInfo({ ...report.projectInfo });
+    setShowProjectInfoEdit(true);
+  };
+
+  // 保存项目信息
+  const handleSaveProjectInfoWithCheck = async () => {
+    if (!report) return;
+
+    const oldInfo = report.projectInfo;
+    const newInfo = editingProjectInfo;
+
+    // 检查哪些字段发生了变化
+    const changedFields: (keyof ProjectInfo)[] = [];
+    ['name', 'location', 'scale', 'investment'].forEach(field => {
+      if (oldInfo[field as keyof ProjectInfo] !== newInfo[field as keyof ProjectInfo]) {
+        changedFields.push(field as keyof ProjectInfo);
+      }
+    });
+
+    if (changedFields.length === 0) {
+      setShowProjectInfoEdit(false);
+      return;
+    }
+
+    // 如果有变更，分析影响
+    for (const field of changedFields) {
+      const oldValue = oldInfo[field as keyof ProjectInfo] || '';
+      const newValue = newInfo[field as keyof ProjectInfo] || '';
+      analyzeLinkage(field, oldValue, newValue);
+      break; // 只处理第一个变更字段
+    }
+  };
+
+  // 确认联动更新
+  const handleConfirmLinkage = async () => {
+    if (!linkageChanges || !report) return;
+
+    setShowLinkageModal(false);
+    await handleSaveProjectInfo();
+
+    // 开始重新生成受影响章节
+    setIsRegenerating(true);
+    setRegenProgress(0);
+    setRegenMessage('正在重新生成受影响章节...');
+
+    try {
+      const affectedSections = linkageChanges.affectedSections;
+      const total = affectedSections.length;
+
+      for (let i = 0; i < affectedSections.length; i++) {
+        const section = affectedSections[i];
+        setRegenProgress(Math.round((i / total) * 100));
+        setRegenMessage(`正在重新生成：${section.title}`);
+
+        // 调用AI生成单个章节
+        const response = await fetch('/api/reports/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectInfo: editingProjectInfo,
+            templateId: report.templateId,
+            sections: [section],
+            generateAll: false,
+            reportId: report.id
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.report && data.report.sections && data.report.sections.length > 0) {
+            const newContent = data.report.sections[0].content;
+
+            // 更新章节内容
+            const updatedSections = report.sections.map(s =>
+              s.id === section.id ? { ...s, content: newContent } : s
+            );
+            setReport({ ...report, sections: updatedSections });
+          }
+        }
+
+        // 避免请求过快
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      setRegenProgress(100);
+      setRegenMessage('更新完成！');
+
+      // 保存更新后的报告
+      await saveReport(report.sections);
+
+    } catch (error) {
+      console.error('Regenerate error:', error);
+      setRegenMessage('更新失败，请重试');
+    } finally {
+      setTimeout(() => {
+        setIsRegenerating(false);
+        setShowProjectInfoEdit(false);
+      }, 1500);
+    }
+  };
+
+  // 跳过联动更新，仅保存项目信息
+  const handleSkipLinkage = async () => {
+    setShowLinkageModal(false);
+    await handleSaveProjectInfo();
+    setShowProjectInfoEdit(false);
+  };
+
+  // 保存项目信息到后端
+  const handleSaveProjectInfo = async () => {
+    if (!report) return;
+
+    setIsSavingProjectInfo(true);
+    try {
+      const res = await fetch(`/api/reports/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectInfo: editingProjectInfo }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setReport({ ...report, projectInfo: editingProjectInfo });
+        setSaveSuccess(true);
+        setLastSaved(new Date());
+        setTimeout(() => setSaveSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error('Save project info error:', err);
+    } finally {
+      setIsSavingProjectInfo(false);
+    }
+  };
 
   // 更新章节内容
   const handleContentChange = (content: string) => {
@@ -668,6 +871,15 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 {report.projectInfo.location && (
                   <span>{report.projectInfo.location}</span>
                 )}
+                <button
+                  onClick={openProjectInfoEdit}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 hover:bg-white/10"
+                  style={{ color: 'var(--accent-primary)' }}
+                  title="编辑项目信息"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  编辑
+                </button>
               </div>
             )}
 
