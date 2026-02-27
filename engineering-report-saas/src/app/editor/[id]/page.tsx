@@ -64,6 +64,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // 编辑状态
@@ -153,6 +154,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       if (data.success) {
         setSaveSuccess(true);
         setLastSaved(new Date());
+        setHasUnsavedChanges(false);
         setTimeout(() => setSaveSuccess(false), 3000);
       } else {
         alert("保存失败: " + (data.error || "未知错误"));
@@ -168,12 +170,43 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     if (!autoSaveEnabled || !report || !activeSectionId) return;
 
+    setHasUnsavedChanges(true);
+
     const timeoutId = setTimeout(() => {
-      saveReport();
+      if (hasUnsavedChanges) {
+        saveReport();
+      }
     }, 2000); // 2秒后自动保存
 
     return () => clearTimeout(timeoutId);
   }, [report?.sections]);
+
+  // 30秒定时自动保存
+  useEffect(() => {
+    if (!autoSaveEnabled || !report) return;
+
+    const intervalId = setInterval(() => {
+      if (hasUnsavedChanges && !saving) {
+        saveReport();
+      }
+    }, 30000); // 每30秒定时保存
+
+    return () => clearInterval(intervalId);
+  }, [autoSaveEnabled, report, hasUnsavedChanges, saving]);
+
+  // 离开页面时检测未保存更改
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '您有未保存的更改，确定要离开吗？';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // 关键信息与受影响章节的映射关系
   const getAffectedSections = (changedField: string, sections: Section[]): Section[] => {
@@ -705,7 +738,15 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         {/* 返回按钮和标题 */}
         <div className="p-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => {
+              if (hasUnsavedChanges) {
+                if (confirm('您有未保存的更改，确定要离开吗？')) {
+                  router.push("/");
+                }
+              } else {
+                router.push("/");
+              }
+            }}
             className="flex items-center gap-2 text-sm transition-colors hover:text-white mb-3"
             style={{ color: 'var(--text-secondary)' }}
           >
@@ -894,14 +935,30 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               自动保存
             </label>
 
+            {/* 未保存更改提示 */}
+            {hasUnsavedChanges && !saving && (
+              <span className="flex items-center gap-1 text-xs" style={{ color: '#f59e0b' }}>
+                <AlertTriangle className="w-3.5 h-3.5" />
+                未保存
+              </span>
+            )}
+
+            {/* 保存中状态 */}
+            {saving && (
+              <span className="flex items-center gap-1 text-xs" style={{ color: '#60a5fa' }}>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                保存中...
+              </span>
+            )}
+
             {/* 最后保存时间 */}
-            {lastSaved && (
+            {lastSaved && !hasUnsavedChanges && !saving && (
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 已保存 {lastSaved.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
 
-            {/* 状态提示 */}
+            {/* 保存成功提示 */}
             {saveSuccess && (
               <span className="flex items-center gap-1 text-xs text-green-400">
                 <Check className="w-3.5 h-3.5" />
