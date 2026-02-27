@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "created": "2026-02-26",
+  "updated": "2026-02-26",
+  "total_articles": 1,
+  "articles": [
+    {
+      "id": "article_001",
+      "title": "阿里出手，最强Coding Plan出炉，OpenClaw可以痛快玩了",
+      "filename": "2026-02-26-ali-coding-plan-openclaw.md",
+      "path": "articles/2026-02/2026-02-26-ali-coding-plan-openclaw.md",
+      "url": "https://mp.weixin.qq.com/s/GCZhS30uOYT-vvcLuIsXrQ",
+      "source": "微信公众号 - 苍何",
+      "date_collected": "2026-02-26",
+      "tags": ["阿里", "coding-plan", "openclaw", "编程工具", "ai开发"],
+      "status": "partial",
+      "summary": "阿里发布最强Coding Plan，OpenClaw可以痛快玩了。这篇文章可能介绍了阿里推出的编程计划或工具，以及与OpenClaw的集成或兼容性。"
+    }
+  ],
+  "topics": {
+    "programming": ["article_001"],
+    "ai-development": ["article_001"]
+  },
+  "stats": {
+    "by_status": {
+      "partial": 1,
+      "complete": 0
+    },
+    "by_source": {
+      "微信公众号": 1
+    },
+    "by_month": {
+      "2026-02": 1
+    }
+  }
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "user_1772123621620_vc7k7n06d",
+    "email": "allenhash98@gmail.com",
+    "name": "AllenHash",
+    "passwordHash": "$2b$10$u0D7I.Kw47UYbOmkwTm1k.v5HHXd11k6jQYKeypmNYRQdKpxtXnmO",
+    "createdAt": 1772123621620,
+    "updatedAt": 1772123621620
+  },
+  {
+    "id": "user_1772123719095_vojekwztb",
+    "email": "test@example.com",
+    "name": "测试用户",
+    "passwordHash": "$2b$10$GkxCE6rNlrXKDRLmwE7wtuBuzll7WLuvRSXDLIY3pfXuQHbYXdAwq",
+    "createdAt": 1772123719095,
+    "updatedAt": 1772123719095
+  }
+]

@@ -34,3 +34,11 @@
 ## 待完成
 - 完善报告生成功能
 - 添加导出功能
+
+---
+
+## 今晚新增工作
+
+- [x] PRD.md - 产品需求文档
+- [x] MARKETING.md - 推广方案
+- [x] AGENT_SYSTEM.md - Agent系统架构方案（10个专业Agent设计）
