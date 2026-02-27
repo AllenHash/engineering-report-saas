@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/components/Toast";
 
 // Lucide图标
 import {
@@ -39,6 +40,7 @@ interface Template {
 export default function NewReportPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const toast = useToast();
 
   const [step, setStep] = useState<"template" | "info">("template");
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -108,7 +110,7 @@ export default function NewReportPage() {
 
   const handleCreateReport = async () => {
     if (!formData.title.trim()) {
-      alert("请输入项目名称");
+      toast.showWarning("请输入项目名称");
       return;
     }
 
@@ -152,7 +154,7 @@ export default function NewReportPage() {
       if (data.success && data.report) {
         router.push(`/editor/${data.report.id}`);
       } else {
-        alert("创建报告失败: " + (data.error || "未知错误"));
+        toast.showError("创建报告失败: " + (data.error || "未知错误"));
       }
     } catch (error) {
       console.error("Create report error:", error);
