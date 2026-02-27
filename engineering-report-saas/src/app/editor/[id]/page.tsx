@@ -18,6 +18,9 @@ import {
   FolderOpen,
   RefreshCw,
   Download,
+  Sparkles,
+  Zap,
+  XCircle,
 } from "lucide-react";
 
 interface Section {
@@ -65,6 +68,15 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [tempTitle, setTempTitle] = useState("");
   const [showAddSection, setShowAddSection] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState("");
+
+  // 生成报告状态
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [generationMessage, setGenerationMessage] = useState("");
+  const [generationCurrentSection, setGenerationCurrentSection] = useState("");
+  const [generatedReport, setGeneratedReport] = useState<any | null>(null);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   // 加载报告数据
   useEffect(() => {
@@ -154,6 +166,124 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const handleSave = async () => {
     if (!report) return;
     await saveReport(report.sections);
+  };
+
+  // 一键生成报告
+  const handleGenerateReport = async () => {
+    if (!report) return;
+
+    // 打开生成进度模态框
+    setShowGenerateModal(true);
+    setIsGenerating(true);
+    setGenerationProgress(0);
+    setGenerationMessage("正在准备生成...");
+    setGenerationCurrentSection("");
+    setGenerationError(null);
+    setGeneratedReport(null);
+
+    try {
+      const response = await fetch('/api/reports/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectInfo: report.projectInfo,
+          templateId: report.templateId,
+          useSSE: true,
+          generateAll: true,
+          reportId: report.id
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || errorData.error || '生成失败');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('无法读取响应');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              // 处理进度更新
+              if (data.progress !== undefined) {
+                setGenerationProgress(data.progress);
+                setGenerationMessage(data.message || '');
+                setGenerationCurrentSection(data.currentSection || '');
+              }
+
+              // 处理完成事件
+              if (data.report) {
+                setGeneratedReport(data.report);
+                setGenerationProgress(100);
+                setGenerationMessage('生成完成！');
+              }
+            } catch (e) {
+              console.error('Parse SSE error:', e);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Generate error:', error);
+      setGenerationError(error.message || '生成报告时出现错误');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // 取消生成
+  const handleCancelGenerate = async () => {
+    if (!report) return;
+
+    try {
+      await fetch(`/api/reports/generate?reportId=${report.id}`, {
+        method: 'DELETE'
+      });
+    } catch (e) {
+      console.error('Cancel error:', e);
+    }
+
+    setIsGenerating(false);
+    setShowGenerateModal(false);
+    setGenerationMessage("");
+  };
+
+  // 应用生成的报告内容
+  const handleApplyGeneratedReport = async () => {
+    if (!generatedReport || !report) return;
+
+    const updatedReport = {
+      ...report,
+      sections: generatedReport.sections,
+      title: generatedReport.title
+    };
+
+    setReport(updatedReport);
+    setShowGenerateModal(false);
+
+    // 自动保存
+    await saveReport(generatedReport.sections);
+
+    // 激活第一个章节
+    if (generatedReport.sections.length > 0) {
+      setActiveSectionId(generatedReport.sections[0].id);
+    }
   };
 
   // 开始编辑标题
@@ -484,6 +614,28 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 <>
                   <Save className="w-4 h-4" />
                   保存
+                </>
+              )}
+            </button>
+
+            {/* 生成报告按钮 */}
+            <button
+              onClick={handleGenerateReport}
+              disabled={isGenerating}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all duration-200 hover:shadow-xl hover:shadow-violet-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 border border-violet-500/30"
+              style={{
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)'
+              }}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  生成中...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  AI生成报告
                 </>
               )}
             </button>

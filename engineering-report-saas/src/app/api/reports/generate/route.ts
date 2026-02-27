@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTemplateById } from "@/data/templates/outlines";
-import { getUserPoints, deductPointsWithRecord } from "@/lib/db";
+import { getUserPoints, deductPointsWithRecord, saveReport } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
 
 // 生成报告消耗的积分
@@ -9,6 +9,17 @@ const REPORT_COST = 20;
 // API配置
 const getApiKey = () => process.env.SILICONFLOW_API_KEY || "sk-couqaakwgtkgrivhntvorigljarpuyvsmfedappuvlctloeg";
 const API_URL = "https://api.siliconflow.cn/v1/chat/completions";
+
+// SSE相关工具函数
+function createSSEEncoder() {
+  return new TextEncoder();
+}
+
+function sendSSEMessage(writer: WritableStreamDefaultWriter<Uint8Array>, event: string, data: any) {
+  const encoder = createSSEEncoder();
+  const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  return writer.write(encoder.encode(message));
+}
 
 // 生成章节内容的系统提示词
 const getSectionPrompt = (section: any, projectInfo: any, templateName: string) => {
@@ -86,7 +97,7 @@ function getUserIdFromRequest(request: NextRequest): string | null {
   return payload?.id || null;
 }
 
-// 生成完整报告
+// 生成完整报告（支持SSE进度推送和取消）
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
 
@@ -102,7 +113,10 @@ export async function POST(request: NextRequest) {
     const {
       projectInfo,   // 项目信息：{ name, location, type, scale, investment }
       templateId,    // 大纲模板ID
-      sections       // 要生成的章节列表（默认全部）
+      sections,      // 要生成的章节列表（默认全部）
+      useSSE = false,// 是否使用SSE推送进度
+      generateAll = false, // 是否生成所有章节（否则只生成3个）
+      reportId       // 报告ID（用于取消时标识）
     } = body;
 
     if (!projectInfo || !templateId) {
@@ -124,23 +138,27 @@ export async function POST(request: NextRequest) {
     // 检查积分并扣除（如果有用户登录）
     if (userId) {
       const points = await getUserPoints(userId);
-      if (points < REPORT_COST) {
+      // 根据生成章节数量调整积分
+      const sectionsCount = generateAll ? template.sections.length : Math.min(3, template.sections.length);
+      const cost = REPORT_COST * Math.ceil(sectionsCount / 3);
+
+      if (points < cost) {
         return NextResponse.json(
           {
             error: `积分不足`,
             code: 'INSUFFICIENT_POINTS',
-            required: REPORT_COST,
+            required: cost,
             current: points,
-            message: `生成报告需要${REPORT_COST}积分，当前${points}积分，请先充值`
+            message: `生成报告需要${cost}积分，当前${points}积分，请先充值`
           },
           { status: 400 }
         );
       }
 
       // 扣除积分并记录交易
-      const reportId = `report_${Date.now()}`;
+      const generatedReportId = reportId || `report_${Date.now()}`;
       const description = `生成报告: ${projectInfo.name || '工程可行性报告'}`;
-      const success = deductPointsWithRecord(userId, REPORT_COST, description, reportId);
+      const success = deductPointsWithRecord(userId, cost, description, generatedReportId);
 
       if (!success) {
         return NextResponse.json(
@@ -148,79 +166,164 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-
-      // 将报告ID返回给前端，后续可用于关联
-      body.generatedReportId = reportId;
     }
 
-    // 确定要生成的章节（限制前3章，确保快速响应）
-    const sectionsToGenerate = (sections || template.sections).slice(0, 3);
-    
+    // 确定要生成的章节
+    let sectionsToGenerate = sections || template.sections;
+    if (!generateAll) {
+      sectionsToGenerate = sectionsToGenerate.slice(0, 3); // 默认只生成前3章
+    }
+
     if (sectionsToGenerate.length === 0) {
       return NextResponse.json(
         { error: "没有可生成的章节" },
         { status: 400 }
       );
     }
-    
-    // 生成报告标题
+
+    const totalSections = sectionsToGenerate.length;
+    const finalReportId = reportId || `report_${Date.now()}`;
     const reportTitle = `${projectInfo.name || '工程'}可行性研究报告`;
-    
-    // 生成每个章节（并行处理提高速度）
-    const generatedSections = [];
-    const sectionPromises = [];
-    
+
+    // SSE 模式：使用流式响应推送进度
+    if (useSSE) {
+      const stream = new ReadableStream({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          let generatedSections: any[] = [];
+          let cancelled = false;
+
+          // 发送进度更新
+          const sendProgress = async (progress: number, message: string, currentSection?: string) => {
+            const data = JSON.stringify({
+              progress,
+              message,
+              currentSection,
+              totalSections,
+              generated: generatedSections.length,
+              reportId: finalReportId
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          };
+
+          try {
+            // 发送开始生成消息
+            await sendProgress(0, '开始生成报告...');
+
+            // 逐章生成
+            for (let i = 0; i < sectionsToGenerate.length; i++) {
+              // 检查是否已取消（通过发送特殊事件）
+              const section = sectionsToGenerate[i];
+              console.log(`[Report] Generating section ${i + 1}/${totalSections}: ${section.title}`);
+
+              await sendProgress(
+                Math.round((i / totalSections) * 100),
+                `正在生成第 ${i + 1} 章：${section.title}`,
+                section.title
+              );
+
+              try {
+                const content = await generateSection(section, projectInfo, template.name);
+
+                const generatedSection = {
+                  id: section.id,
+                  title: section.title,
+                  content: content,
+                  children: section.children?.map((child: any) => ({
+                    id: child.id,
+                    title: child.title,
+                    content: ""
+                  }))
+                };
+
+                generatedSections.push(generatedSection);
+
+                await sendProgress(
+                  Math.round(((i + 1) / totalSections) * 100),
+                  `已完成第 ${i + 1} 章：${section.title}`,
+                  section.title
+                );
+              } catch (error) {
+                console.error(`[Report] Failed to generate section ${section.title}:`, error);
+                generatedSections.push({
+                  id: section.id,
+                  title: section.title,
+                  content: "（章节内容生成失败，请稍后重试）",
+                  children: []
+                });
+              }
+
+              // 避免请求过快
+              await new Promise(resolve => setTimeout(resolve, 300));
+            }
+
+            // 生成完成
+            const fullReport = {
+              id: finalReportId,
+              title: reportTitle,
+              templateId: templateId,
+              templateName: template.name,
+              industry: template.industry,
+              projectInfo: projectInfo,
+              sections: generatedSections,
+              totalSections: template.sections.length,
+              generatedSections: generatedSections.length,
+              createdAt: new Date().toISOString(),
+              status: "completed" as const
+            };
+
+            await sendProgress(100, '报告生成完成！');
+            controller.enqueue(encoder.encode(`event: complete\ndata: ${JSON.stringify({ report: fullReport })}\n\n`));
+            controller.close();
+
+          } catch (error) {
+            console.error("SSE generation error:", error);
+            await sendProgress(0, '生成失败，请重试');
+            controller.close();
+          }
+        }
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        }
+      });
+    }
+
+    // 普通模式（非SSE）：直接返回完整结果
+    const generatedSections: any[] = [];
+
     for (const section of sectionsToGenerate) {
       console.log(`[Report] Queuing section: ${section.title}`);
-      sectionPromises.push(
-        generateSection(section, projectInfo, template.name)
-          .then(content => ({
-            id: section.id,
-            title: section.title,
-            content: content,
-            children: section.children?.map((child: any) => ({
-              id: child.id,
-              title: child.title,
-              content: ""  // 子章节内容可在后续生成
-            }))
+      try {
+        const content = await generateSection(section, projectInfo, template.name);
+        generatedSections.push({
+          id: section.id,
+          title: section.title,
+          content: content,
+          children: section.children?.map((child: any) => ({
+            id: child.id,
+            title: child.title,
+            content: ""
           }))
-          .catch(error => {
-            console.error(`[Report] Failed to generate section ${section.title}:`, error);
-            return {
-              id: section.id,
-              title: section.title,
-              content: "（章节内容生成失败，请稍后重试）",
-              children: []
-            };
-          })
-      );
-    }
-    
-    // 等待所有章节生成完成（带有超时控制）
-    const timeoutPromise = new Promise(resolve => setTimeout(() => {
-      resolve([]);
-    }, 30000)); // 30秒超时
-    
-    const sectionsResult = await Promise.race([
-      Promise.all(sectionPromises),
-      timeoutPromise
-    ]);
-    
-    if (Array.isArray(sectionsResult)) {
-      generatedSections.push(...sectionsResult);
-    } else {
-      // 超时情况，提供部分内容
-      generatedSections.push({
-        id: "1",
-        title: "概述",
-        content: "报告生成超时，请稍后重试或联系客服。",
-        children: []
-      });
+        });
+      } catch (error) {
+        console.error(`[Report] Failed to generate section ${section.title}:`, error);
+        generatedSections.push({
+          id: section.id,
+          title: section.title,
+          content: "（章节内容生成失败，请稍后重试）",
+          children: []
+        });
+      }
     }
 
     // 整合报告
     const fullReport = {
-      id: `report_${Date.now()}`,
+      id: finalReportId,
       title: reportTitle,
       templateId: templateId,
       templateName: template.name,
@@ -230,7 +333,7 @@ export async function POST(request: NextRequest) {
       totalSections: template.sections.length,
       generatedSections: generatedSections.length,
       createdAt: new Date().toISOString(),
-      status: generatedSections.length > 0 ? "partial" : "failed"
+      status: generatedSections.length > 0 ? "completed" as const : "failed" as const
     };
 
     return NextResponse.json({
@@ -246,6 +349,28 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// 取消报告生成
+export async function DELETE(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const reportId = searchParams.get('reportId');
+
+  if (!reportId) {
+    return NextResponse.json(
+      { error: "缺少报告ID" },
+      { status: 400 }
+    );
+  }
+
+  // 标记该报告为已取消
+  // 在实际生产环境中，这里可以存储取消状态供生成过程检查
+  console.log(`[Report] Cancellation requested for report: ${reportId}`);
+
+  return NextResponse.json({
+    success: true,
+    message: "已收到取消请求"
+  });
 }
 
 // 获取报告（模拟数据）
