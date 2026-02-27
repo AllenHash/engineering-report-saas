@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { FileText, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -12,6 +13,12 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    setIsLoaded(true);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,45 +74,86 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
-        <div>
-          <h2 className="text-3xl font-bold text-center text-gray-900">
-            注册账号
-          </h2>
-          <p className="mt-2 text-center text-gray-600">
-            使用邮箱和密码注册
+    <div
+      className="min-h-screen flex items-center justify-center relative overflow-hidden py-8"
+      style={{
+        background: 'linear-gradient(135deg, #0a0f1a 0%, #0f172a 50%, #0d1321 100%)',
+      }}
+    >
+      {/* 背景装饰 */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div
+          className="absolute top-1/4 right-1/4 w-96 h-96 rounded-full opacity-20 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #f59e0b 0%, transparent 70%)' }}
+        />
+        <div
+          className="absolute bottom-1/4 left-1/4 w-80 h-80 rounded-full opacity-15 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)' }}
+        />
+        {/* 网格背景 */}
+        <div
+          className="absolute inset-0 opacity-5"
+          style={{
+            backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                             linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+            backgroundSize: '50px 50px',
+          }}
+        />
+      </div>
+
+      {/* 注册卡片 */}
+      <div
+        className={`relative w-full max-w-md mx-4 p-8 rounded-2xl border transition-all duration-500 ${
+          isLoaded ? 'animate-fade-in-up' : 'opacity-0'
+        }`}
+        style={{
+          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
+          borderColor: 'rgba(71, 85, 105, 0.5)',
+          boxShadow: '0 0 60px rgba(245, 158, 11, 0.1), 0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(20px)',
+        }}
+      >
+        {/* Logo区域 */}
+        <div className="text-center mb-8">
+          <div
+            className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center transition-transform duration-300 hover:scale-110"
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)',
+              boxShadow: '0 8px 32px rgba(245, 158, 11, 0.4)',
+            }}
+          >
+            <FileText className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">创建账号</h1>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            注册成为工程可行性报告系统用户
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded text-sm">
+            <div
+              className="p-3 rounded-lg text-sm animate-fade-in"
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                color: '#f87171',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+              }}
+            >
               {error}
             </div>
           )}
 
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                邮箱地址
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="your@email.com"
+          {/* 用户名输入框 */}
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+              用户名
+            </label>
+            <div className="relative">
+              <User
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors"
+                style={{ color: 'var(--text-muted)' }}
               />
-            </div>
-
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                用户名
-              </label>
               <input
                 id="name"
                 name="name"
@@ -113,59 +161,168 @@ export default function RegisterPage() {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-12 pr-4 py-3 rounded-xl transition-all duration-200 border focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                  boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.2)',
+                }}
                 placeholder="请输入用户名"
               />
             </div>
+          </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                密码
-              </label>
+          {/* 邮箱输入框 */}
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+              邮箱地址
+            </label>
+            <div className="relative">
+              <Mail
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+              />
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 rounded-xl transition-all duration-200 border focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                  boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.2)',
+                }}
+                placeholder="your@email.com"
+              />
+            </div>
+          </div>
+
+          {/* 密码输入框 */}
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+              密码
+            </label>
+            <div className="relative">
+              <Lock
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+              />
               <input
                 id="password"
                 name="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-12 pr-12 py-3 rounded-xl transition-all duration-200 border focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                  boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.2)',
+                }}
                 placeholder="至少6位密码"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors hover:scale-110"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
+          </div>
 
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                确认密码
-              </label>
+          {/* 确认密码输入框 */}
+          <div>
+            <label htmlFor="confirmPassword" className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+              确认密码
+            </label>
+            <div className="relative">
+              <Lock
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+              />
               <input
                 id="confirmPassword"
                 name="confirmPassword"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-12 pr-4 py-3 rounded-xl transition-all duration-200 border focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                  boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.2)',
+                }}
                 placeholder="再次输入密码"
               />
             </div>
           </div>
 
+          {/* 注册按钮 */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            className="w-full py-3.5 rounded-xl font-medium text-white transition-all duration-200 hover:shadow-xl hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 border border-amber-500/30"
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)',
+            }}
           >
-            {loading ? '注册中...' : '注册'}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                注册中...
+              </span>
+            ) : (
+              '注册'
+            )}
           </button>
 
+          {/* 分割线 */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t" style={{ borderColor: 'var(--border-color)' }} />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4" style={{ color: 'var(--text-muted)', background: 'var(--bg-secondary)' }}>或</span>
+            </div>
+          </div>
+
+          {/* 登录链接 */}
           <div className="text-center">
-            <span className="text-gray-600">已有账号？</span>{' '}
-            <Link href="/login" className="text-blue-600 hover:underline">
+            <span style={{ color: 'var(--text-secondary)' }}>已有账号？</span>{' '}
+            <Link
+              href="/login"
+              className="font-medium transition-all duration-200 hover:underline hover:scale-105 inline-block"
+              style={{ color: '#f59e0b' }}
+            >
               立即登录
             </Link>
           </div>
         </form>
+
+        {/* 底部返回首页 */}
+        <div className="mt-8 text-center">
+          <Link
+            href="/"
+            className="text-sm transition-colors hover:text-white"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            返回首页
+          </Link>
+        </div>
       </div>
     </div>
   );
