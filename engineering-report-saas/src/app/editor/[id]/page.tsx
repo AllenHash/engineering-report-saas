@@ -4,6 +4,14 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
+interface ProjectInfo {
+  name: string;
+  location: string;
+  type: string;
+  scale: string;
+  investment: string;
+}
+
 interface Section {
   id: string;
   title: string;
@@ -20,16 +28,19 @@ interface SubSection {
 interface Report {
   id: string;
   title: string;
-  projectInfo: {
-    name: string;
-    location: string;
-    type: string;
-    scale: string;
-    investment: string;
-  };
+  projectInfo: ProjectInfo;
   sections: Section[];
   createdAt: string;
 }
+
+// 关键词与章节映射
+const KEYWORD_MAPPING: Record<string, string[]> = {
+  investment: ["6", "7"], // 投资估算、财务评价
+  location: ["4", "8"],   // 项目选址、社会评价
+  scale: ["3", "5", "6"], // 需求分析、工程建设方案、投资估算
+  name: ["1", "2"],      // 概述、项目背景
+  type: ["2", "5"],       // 项目背景、工程建设方案
+};
 
 // 模拟报告数据
 const MOCK_REPORT: Report = {
@@ -133,14 +144,26 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const router = useRouter();
 
   const [report, setReport] = useState<Report | null>(null);
+  const [originalProjectInfo, setOriginalProjectInfo] = useState<ProjectInfo | null>(null);
+  const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
+    name: "",
+    location: "",
+    type: "",
+    scale: "",
+    investment: "",
+  });
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
   const [selectedSubSection, setSelectedSubSection] = useState<SubSection | null>(null);
   const [editContent, setEditContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [showProjectInfoPanel, setShowProjectInfoPanel] = useState(false);
   const [aiInput, setAiInput] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState("");
+  const [affectedChapters, setAffectedChapters] = useState<string[]>([]);
+  const [showLinkageModal, setShowLinkageModal] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // 加载报告数据
   useEffect(() => {
@@ -149,17 +172,46 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       return;
     }
 
-    // 模拟加载报告
     setReport(MOCK_REPORT);
+    setProjectInfo(MOCK_REPORT.projectInfo);
+    setOriginalProjectInfo(MOCK_REPORT.projectInfo);
     if (MOCK_REPORT.sections.length > 0) {
       setSelectedSection(MOCK_REPORT.sections[0]);
       setEditContent(MOCK_REPORT.sections[0].content);
     }
   }, [user, authLoading, router]);
 
+  // 检测项目信息变更
+  useEffect(() => {
+    if (!originalProjectInfo || !projectInfo) return;
+
+    const changedFields: string[] = [];
+    if (projectInfo.investment !== originalProjectInfo.investment) changedFields.push("investment");
+    if (projectInfo.location !== originalProjectInfo.location) changedFields.push("location");
+    if (projectInfo.scale !== originalProjectInfo.scale) changedFields.push("scale");
+    if (projectInfo.name !== originalProjectInfo.name) changedFields.push("name");
+    if (projectInfo.type !== originalProjectInfo.type) changedFields.push("type");
+
+    if (changedFields.length > 0) {
+      // 计算受影响的章节
+      const affected = new Set<string>();
+      changedFields.forEach((field) => {
+        const chapters = KEYWORD_MAPPING[field];
+        if (chapters) chapters.forEach((c) => affected.add(c));
+      });
+      setAffectedChapters(Array.from(affected));
+      setShowLinkageModal(true);
+    }
+  }, [projectInfo, originalProjectInfo]);
+
+  // 保存项目信息
+  const saveProjectInfo = () => {
+    setOriginalProjectInfo({ ...projectInfo });
+    setShowProjectInfoPanel(false);
+  };
+
   // 选择章节
   const handleSelectSection = (section: Section) => {
-    // 先保存当前编辑的内容
     if (selectedSection && editContent !== selectedSection.content) {
       saveContent();
     }
@@ -170,7 +222,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   // 选择小节
   const handleSelectSubSection = (section: Section, subSection: SubSection) => {
-    // 先保存当前编辑的内容
     if (selectedSubSection && editContent !== selectedSubSection.content) {
       saveSubSectionContent();
     }
@@ -182,11 +233,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   // 保存章节内容
   const saveContent = async () => {
     if (!selectedSection || !report) return;
-
     setIsSaving(true);
-    // 模拟保存
     await new Promise((resolve) => setTimeout(resolve, 500));
-
     setReport((prev) => {
       if (!prev) return prev;
       return {
@@ -202,10 +250,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   // 保存小节内容
   const saveSubSectionContent = async () => {
     if (!selectedSubSection || !selectedSection || !report) return;
-
     setIsSaving(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
-
     setReport((prev) => {
       if (!prev) return prev;
       return {
@@ -219,15 +265,54 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             ),
           };
         }),
-      };
+      }
     });
     setIsSaving(false);
+  };
+
+  // AI 更新受影响章节
+  const updateAffectedChapters = async () => {
+    setIsUpdating(true);
+    setShowLinkageModal(false);
+
+    for (const chapterId of affectedChapters) {
+      const chapter = report?.sections.find((s) => s.id === chapterId);
+      if (!chapter) continue;
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: `请根据更新后的项目信息重写以下章节。\n\n新的项目信息：\n- 项目名称：${projectInfo.name}\n- 建设地点：${projectInfo.location}\n- 建设规模：${projectInfo.scale}\n- 估算投资：${projectInfo.investment}\n\n请重写章节"${chapter.title}"的内容，使其符合新的项目信息。`,
+            projectInfo,
+          }),
+        });
+
+        const data = await response.json();
+        if (data.success && data.response) {
+          setReport((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              sections: prev.sections.map((s) =>
+                s.id === chapterId ? { ...s, content: data.response } : s
+              ),
+            };
+          });
+        }
+      } catch (err) {
+        console.error(`Failed to update chapter ${chapterId}:`, err);
+      }
+    }
+
+    setAffectedChapters([]);
+    setIsUpdating(false);
   };
 
   // AI 重写
   const handleAiRewrite = async () => {
     if (!aiInput.trim()) return;
-
     setIsAiLoading(true);
     setAiResult("");
 
@@ -238,7 +323,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         body: JSON.stringify({
           message: `请根据以下要求重写内容：${aiInput}\n\n当前内容：${editContent}`,
           projectInfo: report?.projectInfo,
-          context: [],
         }),
       });
 
@@ -279,26 +363,29 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push("/reports")}
-              className="text-gray-400 hover:text-white"
-            >
+            <button onClick={() => router.push("/reports")} className="text-gray-400 hover:text-white">
               ← 返回
             </button>
             <div>
               <h1 className="font-medium">{report.title}</h1>
               <p className="text-xs text-gray-500">
-                {report.projectInfo.name} · {report.projectInfo.location}
+                {projectInfo.name} · {projectInfo.location}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setShowProjectInfoPanel(!showProjectInfoPanel)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                showProjectInfoPanel ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+              }`}
+            >
+              📝 项目信息
+            </button>
+            <button
               onClick={() => setShowAiPanel(!showAiPanel)}
               className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                showAiPanel
-                  ? "bg-purple-600 text-white"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                showAiPanel ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"
               }`}
             >
               🤖 AI 助手
@@ -314,6 +401,48 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         </div>
       </header>
 
+      {/* 联动提示弹窗 */}
+      {showLinkageModal && affectedChapters.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-yellow-600/50">
+            <h3 className="text-lg font-medium text-yellow-400 mb-4">⚡ 项目信息已变更</h3>
+            <p className="text-gray-300 mb-4">
+              检测到项目信息已修改，以下章节可能需要更新：
+            </p>
+            <div className="space-y-2 mb-6">
+              {affectedChapters.map((id) => {
+                const chapter = report.sections.find((s) => s.id === id);
+                return chapter ? (
+                  <div key={id} className="flex items-center gap-2 text-gray-300">
+                    <span className="text-yellow-500">•</span>
+                    {chapter.title}
+                  </div>
+                ) : null;
+              })}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowLinkageModal(false);
+                  setAffectedChapters([]);
+                  setProjectInfo(originalProjectInfo!);
+                }}
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
+              >
+                忽略
+              </button>
+              <button
+                onClick={updateAffectedChapters}
+                disabled={isUpdating}
+                className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm font-medium"
+              >
+                {isUpdating ? "更新中..." : "🔄 一键更新"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：章节导航 */}
         <aside className="w-80 border-r border-gray-800 overflow-y-auto bg-gray-800/30">
@@ -322,19 +451,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             <div className="space-y-2">
               {report.sections.map((section) => (
                 <div key={section.id}>
-                  {/* 一级章节 */}
                   <button
                     onClick={() => handleSelectSection(section)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
                       selectedSection?.id === section.id && !selectedSubSection
                         ? "bg-blue-600 text-white"
+                        : affectedChapters.includes(section.id)
+                        ? "bg-yellow-600/20 text-yellow-400 border border-yellow-600/30"
                         : "text-gray-300 hover:bg-gray-700"
                     }`}
                   >
+                    {affectedChapters.includes(section.id) && <span className="text-xs">⚡</span>}
                     {section.title}
                   </button>
-
-                  {/* 二级章节 */}
                   {selectedSection?.id === section.id && section.children && (
                     <div className="ml-4 mt-1 space-y-1">
                       {section.children.map((child) => (
@@ -382,17 +511,81 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           )}
         </main>
 
-        {/* 右侧：AI 面板 */}
-        {showAiPanel && (
+        {/* 右侧：面板 */}
+        {showProjectInfoPanel && (
+          <aside className="w-80 border-l border-gray-800 bg-gray-800/30 flex flex-col">
+            <div className="p-4 border-b border-gray-800">
+              <h3 className="font-medium">📝 项目信息</h3>
+            </div>
+            <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+              <div>
+                <label className="text-sm text-gray-400 block mb-1">项目名称</label>
+                <input
+                  type="text"
+                  value={projectInfo.name}
+                  onChange={(e) => setProjectInfo({ ...projectInfo, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 block mb-1">建设地点</label>
+                <input
+                  type="text"
+                  value={projectInfo.location}
+                  onChange={(e) => setProjectInfo({ ...projectInfo, location: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 block mb-1">工程类型</label>
+                <select
+                  value={projectInfo.type}
+                  onChange={(e) => setProjectInfo({ ...projectInfo, type: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="highway">公路工程</option>
+                  <option value="municipal">市政工程</option>
+                  <option value="environmental">生态环境工程</option>
+                  <option value="water">水利工程</option>
+                  <option value="building">建筑工程</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 block mb-1">建设规模</label>
+                <input
+                  type="text"
+                  value={projectInfo.scale}
+                  onChange={(e) => setProjectInfo({ ...projectInfo, scale: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 block mb-1">估算投资</label>
+                <input
+                  type="text"
+                  value={projectInfo.investment}
+                  onChange={(e) => setProjectInfo({ ...projectInfo, investment: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <button
+                onClick={saveProjectInfo}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium"
+              >
+                保存信息
+              </button>
+            </div>
+          </aside>
+        )}
+
+        {showAiPanel && !showProjectInfoPanel && (
           <aside className="w-96 border-l border-gray-800 bg-gray-800/30 flex flex-col">
             <div className="p-4 border-b border-gray-800">
               <h3 className="font-medium">🤖 AI 重写</h3>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto space-y-4">
+            <div className="flex-1 p-4 space-y-4 overflow-y-auto">
               <div>
-                <label className="text-sm text-gray-400 block mb-2">
-                  输入重写要求
-                </label>
+                <label className="text-sm text-gray-400 block mb-2">输入重写要求</label>
                 <textarea
                   value={aiInput}
                   onChange={(e) => setAiInput(e.target.value)}
@@ -411,9 +604,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
               {aiResult && (
                 <div>
-                  <label className="text-sm text-gray-400 block mb-2">
-                    生成结果
-                  </label>
+                  <label className="text-sm text-gray-400 block mb-2">生成结果</label>
                   <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-300 max-h-60 overflow-y-auto">
                     {aiResult}
                   </div>
