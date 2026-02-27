@@ -4,6 +4,33 @@ import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { downloadPDF } from "@/lib/pdf-export";
 
+// Lucide图标导入
+import {
+  FileText,
+  FolderOpen,
+  Settings,
+  User,
+  LogOut,
+  Send,
+  ChevronRight,
+  ChevronLeft,
+  Download,
+  FileJson,
+  MapPin,
+  Ruler,
+  DollarSign,
+  Construction,
+  Highway,
+  Building2,
+  Leaf,
+  Plus,
+  Loader2,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles
+} from "lucide-react";
+
 interface Message {
   id: string;
   role: "user" | "assistant" | "system";
@@ -47,7 +74,7 @@ export default function Home() {
     {
       id: "1",
       role: "assistant",
-      content: "你好，你需要写一份什么报告？\n\n我可以帮你编写：\n- 🛣️ 公路工程\n- 🏙️ 市政工程\n- 🌿 生态环境工程",
+      content: "你好，我是工程可行性报告AI助手。\n\n告诉我你的项目信息，我可以帮你编写：\n• 公路工程可研报告\n• 市政工程可研报告\n• 生态环境影响评价",
       timestamp: new Date(),
     },
   ]);
@@ -379,57 +406,78 @@ export default function Home() {
   // 获取当前项目
   const currentProject = projects.find(p => p.id === currentProjectId);
 
-  // 状态颜色映射
+  // 状态颜色映射 - 使用设计指南配色
   const statusColors: Record<string, string> = {
-    "进行中": "bg-blue-500/20 text-blue-400",
-    "已完成": "bg-green-500/20 text-green-400",
-    "待审批": "bg-yellow-500/20 text-yellow-400"
+    "进行中": "bg-amber-500/20 text-amber-400",
+    "已完成": "bg-emerald-500/20 text-emerald-400",
+    "待审批": "bg-orange-500/20 text-orange-400",
+    "生成中": "bg-blue-500/20 text-blue-400"
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-gray-900">
+    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
       {/* 左侧栏 - 项目列表 */}
-      <aside className="w-64 flex-shrink-0 flex flex-col border-r border-gray-800 bg-gray-950">
-        <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-800">
-          <span className="text-lg">📋</span>
-          <span className="font-semibold text-white">我的项目</span>
+      <aside className="w-64 flex-shrink-0 flex flex-col border-r transition-all duration-300" style={{ borderColor: 'var(--border-color)', background: 'linear-gradient(180deg, #0f172a 0%, #0d1321 100%)' }}>
+        {/* Logo区域 */}
+        <div className="flex items-center gap-3 px-4 py-5 border-b" style={{ borderColor: 'var(--border-color)' }}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, #d97706 100%)' }}>
+            <FileText className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-white text-sm tracking-wide">我的项目</h2>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>工程可行性报告</p>
+          </div>
         </div>
 
-        {/* 新建项目按钮 */}
+        {/* 新建项目按钮 - 琥珀色强调 */}
         <div className="p-3">
           <button
             onClick={handleNewProject}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            className="w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-amber-500/20"
+            style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, #b45309 100%)' }}
           >
-            <span>+ 新建项目</span>
+            <Plus className="w-4 h-4" />
+            <span>新建项目</span>
           </button>
         </div>
 
         {/* 项目列表 */}
-        <div className="flex-1 overflow-y-auto px-2 py-2">
+        <div className="flex-1 overflow-y-auto px-2 py-2 custom-scrollbar">
           {isLoadingProjects ? (
-            <div className="flex items-center justify-center py-4">
-              <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--accent-primary)' }} />
             </div>
           ) : projects.length === 0 ? (
-            <div className="text-center py-4 text-gray-500 text-sm">
-              暂无项目，点击上方"新建项目"开始
+            <div className="text-center py-8 px-4">
+              <FolderOpen className="w-10 h-10 mx-auto mb-3 opacity-30" style={{ color: 'var(--text-muted)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>暂无项目</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>点击上方"新建项目"开始</p>
             </div>
           ) : (
-            <div className="space-y-1">
-              {projects.map((project) => (
+            <div className="space-y-2">
+              {projects.map((project, index) => (
                 <button
                   key={project.id}
                   onClick={() => handleSelectProject(project.id)}
-                  className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
-                    currentProjectId === project.id
-                      ? "bg-gray-800 border border-gray-700"
-                      : "hover:bg-gray-800/50 border border-transparent"
-                  }`}
+                  className="w-full rounded-lg px-3 py-3 text-left transition-all duration-200 hover:translate-x-1"
+                  style={{
+                    background: currentProjectId === project.id
+                      ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%)'
+                      : 'transparent',
+                    border: currentProjectId === project.id
+                      ? '1px solid rgba(245, 158, 11, 0.3)'
+                      : '1px solid transparent',
+                  }}
                 >
-                  <div className="text-sm text-gray-200 truncate">{project.name}</div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${statusColors[project.status]}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-white truncate flex-1">{project.name}</div>
+                    <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--text-muted)' }} />
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${statusColors[project.status]}`}>
+                      {project.status === '已完成' && <CheckCircle2 className="w-3 h-3" />}
+                      {project.status === '进行中' && <Clock className="w-3 h-3" />}
+                      {project.status === '生成中' && <Loader2 className="w-3 h-3 animate-spin" />}
                       {project.status}
                     </span>
                   </div>
@@ -440,66 +488,113 @@ export default function Home() {
         </div>
 
         {/* 底部设置 */}
-        <div className="border-t border-gray-800 p-3">
-          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 hover:bg-gray-800 hover:text-white">
-            <span>⚙️</span>
+        <div className="border-t p-3" style={{ borderColor: 'var(--border-color)' }}>
+          <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-white/5" style={{ color: 'var(--text-secondary)' }}>
+            <Settings className="w-4 h-4" />
             <span>设置</span>
           </button>
         </div>
       </aside>
 
       {/* 中间栏 - 对话区 */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-6 py-3">
+      <div className="flex-1 flex flex-col min-w-0" style={{ background: 'var(--bg-primary)' }}>
+        {/* 顶部导航栏 */}
+        <header className="flex items-center justify-between px-6 py-3 border-b backdrop-blur-sm" style={{ borderColor: 'var(--border-color)', background: 'rgba(15, 23, 42, 0.8)' }}>
           <h1 className="text-base font-medium text-white truncate">
-            {currentProject?.name || "工程可行性报告AI助手"}
+            <span className="inline-flex items-center gap-2">
+              <Sparkles className="w-4 h-4" style={{ color: 'var(--accent-primary)' }} />
+              {currentProject?.name || "工程可行性报告AI助手"}
+            </span>
           </h1>
           <div className="flex items-center gap-3">
             {user && (
               <div className="flex items-center gap-2 mr-2">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium" style={{ background: 'linear-gradient(135deg, var(--accent-secondary) 0%, #1d4ed8 100%)' }}>
                   {user.name.charAt(0).toUpperCase()}
                 </div>
-                <span className="text-sm text-gray-300">{user.name}</span>
+                <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{user.name}</span>
               </div>
             )}
             <a
               href="/profile"
-              className="rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
+              className="rounded-lg px-3 py-1.5 text-xs flex items-center gap-2 transition-all hover:bg-white/5"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-tertiary)' }}
             >
-              👤 账号管理
+              <User className="w-3 h-3" />
+              账号管理
             </a>
             <button
               onClick={logout}
-              className="rounded-lg bg-red-600/20 px-3 py-1.5 text-xs text-red-400 hover:bg-red-600/30"
+              className="rounded-lg px-3 py-1.5 text-xs flex items-center gap-2 transition-all hover:bg-red-500/10"
+              style={{ color: '#f87171', background: 'rgba(239, 68, 68, 0.1)' }}
             >
+              <LogOut className="w-3 h-3" />
               退出
             </button>
             {projectInfo?.name && projectInfo?.location && (
               <button
                 onClick={handleGenerateReport}
                 disabled={isGenerating}
-                className="rounded-lg bg-green-600 px-3 py-1.5 text-xs text-white hover:bg-green-700 disabled:opacity-50"
+                className="rounded-lg px-4 py-1.5 text-xs font-medium text-white flex items-center gap-2 transition-all hover:shadow-lg hover:shadow-emerald-500/20 disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg, var(--accent-success) 0%, #059669 100%)' }}
               >
-                {isGenerating ? "生成中..." : "🚀 生成完整报告"}
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    生成中...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3" />
+                    生成完整报告
+                  </>
+                )}
               </button>
             )}
             <button
               onClick={() => setShowRightPanel(!showRightPanel)}
-              className="rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
+              className="rounded-lg px-3 py-1.5 text-xs flex items-center gap-2 transition-all hover:bg-white/5"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-tertiary)' }}
             >
-              {showRightPanel ? "收起 ▶" : "展开 ◀"}
+              {showRightPanel ? (
+                <>
+                  收起
+                  <ChevronRight className="w-3 h-3" />
+                </>
+              ) : (
+                <>
+                  展开
+                  <ChevronLeft className="w-3 h-3" />
+                </>
+              )}
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto bg-gray-900 px-4 py-4">
-          <div className="mx-auto max-w-3xl space-y-4">
-            {messages.map((message) => (
-              <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.role === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"}`}>
+        {/* 对话内容区 */}
+        <div className="flex-1 overflow-y-auto px-4 py-6" style={{ background: 'linear-gradient(180deg, var(--bg-primary) 0%, #0c1222 100%)' }}>
+          <div className="mx-auto max-w-3xl space-y-6">
+            {messages.map((message, index) => (
+              <div
+                key={message.id}
+                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 transition-all duration-200 ${
+                    message.role === "user"
+                      ? "text-white"
+                      : "text-gray-100"
+                  }`}
+                  style={{
+                    background: message.role === "user"
+                      ? 'linear-gradient(135deg, var(--accent-secondary) 0%, #1d4ed8 100%)'
+                      : 'linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%)',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                  }}
+                >
                   <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
-                  <div className={`mt-1.5 text-xs ${message.role === "user" ? "text-blue-300" : "text-gray-500"}`}>
+                  <div className={`mt-2 text-xs ${message.role === "user" ? "text-blue-200" : "text-gray-500"}`}>
                     {message.timestamp.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
                   </div>
                 </div>
@@ -507,11 +602,18 @@ export default function Home() {
             ))}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="rounded-2xl bg-gray-800 px-4 py-3">
-                  <div className="flex space-x-1.5">
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-gray-500"></div>
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-gray-500" style={{ animationDelay: "0.1s" }}></div>
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-gray-500" style={{ animationDelay: "0.2s" }}></div>
+                <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--bg-secondary)' }}>
+                  <div className="flex space-x-2">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="h-2 w-2 rounded-full animate-bounce"
+                        style={{
+                          background: 'var(--accent-primary)',
+                          animationDelay: `${i * 150}ms`
+                        }}
+                      ></div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -520,23 +622,36 @@ export default function Home() {
           </div>
         </div>
 
-        <footer className="border-t border-gray-800 bg-gray-950 px-4 py-4">
+        {/* 输入区域 */}
+        <footer className="border-t px-4 py-4" style={{ borderColor: 'var(--border-color)', background: 'rgba(15, 23, 42, 0.9)' }}>
           <div className="mx-auto max-w-3xl">
-            <div className="flex gap-3 rounded-xl border border-gray-700 bg-gray-900 p-2">
+            <div
+              className="flex gap-3 rounded-xl p-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-amber-500/30"
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)'
+              }}
+            >
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="输入你的需求..."
-                className="flex-1 resize-none rounded-lg bg-transparent px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none"
+                placeholder="描述你的项目需求..."
+                className="flex-1 resize-none rounded-lg px-4 py-3 text-sm transition-colors bg-transparent focus:outline-none"
+                style={{
+                  color: 'var(--text-primary)',
+                  '::placeholder': { color: 'var(--text-muted)' }
+                }}
                 rows={1}
-                style={{ minHeight: "40px", maxHeight: "100px" }}
+                style={{ minHeight: "44px", maxHeight: "120px" }}
               />
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg px-5 py-2 text-sm font-medium flex items-center gap-2 transition-all duration-200 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 text-white"
+                style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, #b45309 100%)' }}
               >
+                <Send className="w-4 h-4" />
                 发送
               </button>
             </div>
