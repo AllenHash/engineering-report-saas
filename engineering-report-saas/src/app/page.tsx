@@ -27,7 +27,13 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  FileCheck,
+  FileEdit,
+  Coins,
+  Wrench,
+  PartyPopper,
+  MapPinned
 } from "lucide-react";
 
 interface Message {
@@ -73,7 +79,7 @@ export default function Home() {
     {
       id: "1",
       role: "assistant",
-      content: "你好，我是工程可行性报告AI助手。\n\n告诉我你的项目信息，我可以帮你编写：\n• 公路工程可研报告\n• 市政工程可研报告\n• 生态环境影响评价",
+      content: "你好，我是工程可行性报告AI助手。\n\n告诉我你的项目信息，我可以帮你编写：\n- 公路工程可研报告\n- 市政工程可研报告\n- 生态环境影响评价",
       timestamp: new Date(),
     },
   ]);
@@ -252,7 +258,7 @@ export default function Home() {
         const sysMsg: Message = {
           id: Date.now().toString(),
           role: "assistant",
-          content: "✅ 报告已生成完成！请在右侧查看完整内容。",
+          content: "🎉 报告已生成完成！请在右侧查看完整内容。",
           timestamp: new Date()
         };
         setMessages(prev => [...prev, sysMsg]);
@@ -332,7 +338,7 @@ export default function Home() {
       {
         id: "1",
         role: "assistant",
-        content: "你好，你需要写一份什么报告？\n\n我可以帮你编写：\n- 🛣️ 公路工程\n- 🏙️ 市政工程\n- 🌿 生态环境工程",
+        content: "你好，你需要写一份什么报告？\n\n我可以帮你编写：\n- 公路工程\n- 市政工程\n- 生态环境工程",
         timestamp: new Date(),
       },
     ]);
@@ -365,7 +371,7 @@ export default function Home() {
           {
             id: "1",
             role: "assistant",
-            content: "你好，你需要写一份什么报告？\n\n我可以帮你编写：\n- 🛣️ 公路工程\n- 🏙️ 市政工程\n- 🌿 生态环境工程",
+            content: "你好，你需要写一份什么报告？\n\n我可以帮你编写：\n- 公路工程\n- 市政工程\n- 生态环境工程",
             timestamp: new Date(),
           },
         ]);
@@ -671,7 +677,7 @@ export default function Home() {
                 borderBottom: rightTab === "report" ? '2px solid var(--accent-secondary)' : '2px solid transparent'
               }}
             >
-              📄 报告预览
+              <FileText className="w-4 h-4" /> 报告预览
             </button>
             <button
               onClick={() => setRightTab("file")}
@@ -681,7 +687,7 @@ export default function Home() {
                 borderBottom: rightTab === "file" ? '2px solid var(--accent-secondary)' : '2px solid transparent'
               }}
             >
-              📁 文件预览
+              <FolderOpen className="w-4 h-4" /> 文件预览
             </button>
           </div>
 
@@ -690,7 +696,7 @@ export default function Home() {
             <>
               <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--border-color)' }}>
                 <div className="flex items-center gap-2">
-                  <span className="text-base">📄</span>
+                  <FileText className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
                   <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>报告预览</span>
                 </div>
                 {reportData && (
@@ -700,14 +706,14 @@ export default function Home() {
                       className="rounded px-2 py-1 text-xs transition-colors"
                       style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     >
-                      📝 Markdown
+                      <FileEdit className="w-3 h-3" /> Markdown
                     </button>
                     <button
                       onClick={exportReportPDF}
                       className="rounded px-2 py-1 text-xs text-white transition-colors"
                       style={{ background: 'var(--accent-secondary)' }}
                     >
-                      📄 PDF
+                      <FileCheck className="w-3 h-3" /> PDF
                     </button>
                   </div>
                 )}
