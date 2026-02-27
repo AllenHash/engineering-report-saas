@@ -9,8 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.4.2",
     "@prisma/client": "^7.4.1",
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.6.2",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.0",
     "lucide-react": "^0.575.0",

@@ -54,6 +54,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 编辑状态
@@ -97,19 +100,25 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   };
 
   // 保存报告到数据库
-  const saveReport = async (sections: Section[]) => {
+  const saveReport = async (sections?: Section[]) => {
     if (!report) return;
 
+    const sectionsToSave = sections || report.sections;
     setSaving(true);
+    setSaveSuccess(false);
     try {
       const res = await fetch(`/api/reports/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sections }),
+        body: JSON.stringify({ sections: sectionsToSave }),
       });
 
       const data = await res.json();
-      if (!data.success) {
+      if (data.success) {
+        setSaveSuccess(true);
+        setLastSaved(new Date());
+        setTimeout(() => setSaveSuccess(false), 3000);
+      } else {
         alert("保存失败: " + (data.error || "未知错误"));
       }
     } catch (err) {
@@ -118,6 +127,17 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       setSaving(false);
     }
   };
+
+  // 自动保存 - 当章节内容变化时自动保存
+  useEffect(() => {
+    if (!autoSaveEnabled || !report || !activeSectionId) return;
+
+    const timeoutId = setTimeout(() => {
+      saveReport();
+    }, 2000); // 2秒后自动保存
+
+    return () => clearTimeout(timeoutId);
+  }, [report?.sections]);
 
   // 更新章节内容
   const handleContentChange = (content: string) => {
@@ -413,17 +433,52 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               </div>
             )}
 
+            {/* 自动保存开关 */}
+            <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-muted)' }}>
+              <input
+                type="checkbox"
+                checked={autoSaveEnabled}
+                onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-amber-500"
+              />
+              自动保存
+            </label>
+
+            {/* 最后保存时间 */}
+            {lastSaved && (
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                已保存 {lastSaved.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+
+            {/* 状态提示 */}
+            {saveSuccess && (
+              <span className="flex items-center gap-1 text-xs text-green-400">
+                <Check className="w-3.5 h-3.5" />
+                保存成功
+              </span>
+            )}
+
             {/* 保存按钮 */}
             <button
               onClick={handleSave}
               disabled={saving}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all duration-200 hover:shadow-xl hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 border border-amber-500/30"
-              style={{ background: 'linear-gradient(135deg, var(--accent-primary) 0%, #b45309 100%)' }}
+              style={{
+                background: saveSuccess
+                  ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
+                  : 'linear-gradient(135deg, var(--accent-primary) 0%, #b45309 100%)'
+              }}
             >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   保存中...
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  已保存
                 </>
               ) : (
                 <>
